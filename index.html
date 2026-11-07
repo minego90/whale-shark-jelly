@@ -123,6 +123,7 @@ select{font:500 12px var(--sans);background:transparent;color:var(--ink);border:
    <label><input type="checkbox" id="cMesh"> Show mesh</label>
    <label><input type="checkbox" id="cPause"> Pause</label>
    <label><input type="checkbox" id="cTwist"> Twist pointer</label>
+   <label><input type="checkbox" id="cKelp" checked> Seaweed</label>
   </div>
   <div class="row" style="margin-top:14px"><label for="sDetail">Lattice detail</label>
    <select id="sDetail"><option value="0.04">Fine · 18k tets</option><option value="0.05" selected>Standard · 9k</option><option value="0.06">Light · 5k</option></select></div>
@@ -130,7 +131,7 @@ select{font:500 12px var(--sans);background:transparent;color:var(--ink);border:
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v9 - 11-07_22:30Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v10 - 11-07_22:36Z</p>
  </aside>
 </div>
 <script type="module">
@@ -698,7 +699,7 @@ function createWorld(cell) {
   }
   const endGrab = (id = 0) => { if (id < 0) grabs.clear(); else grabs.delete(id); };
   const totalMassG = 1.05 * totalV * 1000;
-  return { L, S, YM, MOUTH, H, nv, nt, pos, vel, nrm, bnrm, computeNormals, step, reset, volumeRatio, gapeMM, mouthFrame, pickVertex, beginGrab, moveGrab, endGrab, setColliders, eyeP, spirP, eyeV, totalMassG, totalV, P, surfV };
+  return { L, S, YM, MOUTH, H, nv, nt, pos, vel, nrm, bnrm, computeNormals, step, reset, volumeRatio, gapeMM, mouthFrame, pickVertex, beginGrab, moveGrab, endGrab, setColliders, cols: () => ({ a: col, n: ncol }), eyeP, spirP, eyeV, totalMassG, totalV, P, surfV };
 }
 
 // ---------------------------------------------------------------- krill (rigid elongated beads)
@@ -875,6 +876,99 @@ function createKrill(world) {
   return K;
 }
 //#endregion
+
+
+// ---------------------------------------------------------------- seaweed (soft gel strands rooted on the floor)
+const KELP_CLUMPS = 7, KELP_PER = 3, KELP_SEG = 9, KELP_N = KELP_CLUMPS * KELP_PER, KELP_INST = KELP_N * (KELP_SEG - 1);
+function createKelp(world) {
+  const Kp = { n: KELP_N, inst: new Float32Array(KELP_INST * 12), count: 0 };
+  const P = new Float32Array(KELP_N * KELP_SEG * 3), Pv = new Float32Array(KELP_N * KELP_SEG * 3), Pp = new Float32Array(KELP_N * KELP_SEG * 3);
+  const st = [];
+  let seed = 7; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let c = 0; c < KELP_CLUMPS; c++) {
+    const th = (c + 0.2 + rnd() * 0.6) / KELP_CLUMPS * 2 * Math.PI, rr = 1.95 + rnd() * 0.4, cx = 1.5 + Math.cos(th) * rr, cz = Math.sin(th) * rr;
+    for (let m = 0; m < KELP_PER; m++) {
+      const i = c * KELP_PER + m, bx = cx + (rnd() - 0.5) * 0.28, bz = cz + (rnd() - 0.5) * 0.28, sp = 0.10 + rnd() * 0.07;
+      st.push({ bx, bz, sp, w: 0.034 + rnd() * 0.014, ph: rnd() * 6.28, side: [rnd() - 0.5, 0.2, rnd() - 0.5], hue: rnd() });
+      for (let j = 0; j < KELP_SEG; j++) { const o = (i * KELP_SEG + j) * 3; P[o] = bx; P[o + 1] = j * sp; P[o + 2] = bz; Pp[o] = bx; Pp[o + 1] = j * sp; Pp[o + 2] = bz; }
+    }
+  }
+  const bins = 7, bsum = new Float64Array(bins * 3), bcnt = new Int32Array(bins), brad = new Float32Array(bins);
+  const binOf = new Int8Array(world.nv); for (let v = 0; v < world.nv; v++) binOf[v] = Math.max(0, Math.min(bins - 1, Math.floor(world.L.rest[3 * v] / LB * bins)));
+  for (let b = 0; b < bins; b++) brad[b] = Math.max(0.1, profileAt((b + 0.5) / bins * LB).Ht * 0.8);
+  let tm = 0;
+  Kp.step = (dt) => {
+    tm += dt; const n = 3, h = dt / n, pos = world.pos;
+    bsum.fill(0); bcnt.fill(0);
+    for (let v = 0; v < world.nv; v++) { const b = binOf[v]; bsum[3 * b] += pos[3 * v]; bsum[3 * b + 1] += pos[3 * v + 1]; bsum[3 * b + 2] += pos[3 * v + 2]; bcnt[b]++; }
+    const hc = world.cols();
+    for (let s_ = 0; s_ < n; s_++) {
+      for (let i = 0; i < KELP_N; i++) {
+        const S = st[i], base = i * KELP_SEG * 3;
+        for (let j = 1; j < KELP_SEG; j++) {
+          const o = base + j * 3, y = P[o + 1];
+          Pv[o] = (P[o] - Pp[o]) / h; Pv[o + 1] = (P[o + 1] - Pp[o + 1]) / h; Pv[o + 2] = (P[o + 2] - Pp[o + 2]) / h;
+          // buoyancy + a slow current that swirls with height; stronger toward the tip
+          const k = j / (KELP_SEG - 1), sw = 0.55 * k;
+          Pv[o] += (1.1 * Math.sin(tm * 0.8 + y * 2.1 + S.ph) + 0.5 * Math.sin(tm * 1.9 + S.ph * 2 + y * 3)) * sw * h;
+          Pv[o + 2] += (1.1 * Math.cos(tm * 0.65 + y * 1.8 + S.ph) + 0.5 * Math.sin(tm * 1.7 + S.ph + y * 2.4)) * sw * h;
+          Pv[o + 1] += 4.0 * h; const dm = Math.exp(-1.9 * h); Pv[o] *= dm; Pv[o + 1] *= dm; Pv[o + 2] *= dm;
+          Pp[o] = P[o]; Pp[o + 1] = P[o + 1]; Pp[o + 2] = P[o + 2];
+          P[o] += Pv[o] * h; P[o + 1] += Pv[o + 1] * h; P[o + 2] += Pv[o + 2] * h;
+        }
+        // distance + bending constraints (soft, so the strand wobbles like gel)
+        for (let it = 0; it < 4; it++) {
+          for (let j = 1; j < KELP_SEG; j++) {
+            const a = base + (j - 1) * 3, b = base + j * 3, dx = P[b] - P[a], dy = P[b + 1] - P[a + 1], dz = P[b + 2] - P[a + 2], l = Math.hypot(dx, dy, dz) || 1e-6, d = (l - S.sp) / l;
+            const wa = j === 1 ? 0 : 0.5, wb = j === 1 ? 1 : 0.5;
+            P[a] += dx * d * wa; P[a + 1] += dy * d * wa; P[a + 2] += dz * d * wa; P[b] -= dx * d * wb; P[b + 1] -= dy * d * wb; P[b + 2] -= dz * d * wb;
+          }
+          for (let j = 2; j < KELP_SEG; j++) {
+            const a = base + (j - 2) * 3, b = base + j * 3, dx = P[b] - P[a], dy = P[b + 1] - P[a + 1], dz = P[b + 2] - P[a + 2], l = Math.hypot(dx, dy, dz) || 1e-6, d = (l - 1.9 * S.sp) / l * 0.22;
+            const wa = j === 2 ? 0 : 0.5, wb = j === 2 ? 1 : 0.5;
+            P[a] += dx * d * wa; P[a + 1] += dy * d * wa; P[a + 2] += dz * d * wa; P[b] -= dx * d * wb; P[b + 1] -= dy * d * wb; P[b + 2] -= dz * d * wb;
+          }
+          // keep the root segment standing up
+          { const a = base + 3, dx = P[a] - S.bx, dy = P[a + 1] + S.sp, dz = P[a + 2] - S.bz, l = Math.hypot(dx, dy, dz) || 1e-6, d = (l - 2 * S.sp) / l * 0.5; P[a] -= dx * d; P[a + 1] -= dy * d; P[a + 2] -= dz * d; }
+          for (let j = 1; j < KELP_SEG; j++) {
+            const o = base + j * 3; if (P[o + 1] < 0.01) P[o + 1] = 0.01;
+            const rj = 0.03 + (1 - j / KELP_SEG) * 0.012;
+            for (let b = 0; b < bins; b++) { // shark body
+              if (!bcnt[b]) continue; const cx = bsum[3 * b] / bcnt[b], cy = bsum[3 * b + 1] / bcnt[b], cz = bsum[3 * b + 2] / bcnt[b], R = brad[b] + rj;
+              const dx = P[o] - cx, dy = P[o + 1] - cy, dz = P[o + 2] - cz, d2 = dx * dx + dy * dy + dz * dz; if (d2 < R * R) { const d = Math.sqrt(d2) || 1e-6, f = (R - d) / d; P[o] += dx * f; P[o + 1] += dy * f; P[o + 2] += dz * f; }
+            }
+            for (let c = 0; c < hc.n; c++) { // hands
+              const q = c * 8, R = hc.a[q + 3] + rj, dx = P[o] - hc.a[q], dy = P[o + 1] - hc.a[q + 1], dz = P[o + 2] - hc.a[q + 2], d2 = dx * dx + dy * dy + dz * dz;
+              if (d2 < R * R) { const d = Math.sqrt(d2) || 1e-6, f = (R - d) / d; P[o] += dx * f; P[o + 1] += dy * f; P[o + 2] += dz * f; }
+            }
+          }
+        }
+      }
+    }
+  };
+  // one flattened ellipsoid per segment, oriented along the strand
+  Kp.fill = () => {
+    let n = 0; const I = Kp.inst;
+    for (let i = 0; i < KELP_N; i++) {
+      const S = st[i], base = i * KELP_SEG * 3;
+      for (let j = 0; j < KELP_SEG - 1; j++) {
+        const a = base + j * 3, b = a + 3; let dx = P[b] - P[a], dy = P[b + 1] - P[a + 1], dz = P[b + 2] - P[a + 2]; const l = Math.hypot(dx, dy, dz) || 1e-6; dx /= l; dy /= l; dz /= l;
+        let sx = S.side[0], sy = S.side[1], sz = S.side[2]; const dd = sx * dx + sy * dy + sz * dz; sx -= dx * dd; sy -= dy * dd; sz -= dz * dd; const sl = Math.hypot(sx, sy, sz) || 1e-6; sx /= sl; sy /= sl; sz /= sl;
+        const zx = dy * sz - dz * sy, zy = dz * sx - dx * sz, zz = dx * sy - dy * sx; // columns: x=dir, y=side, z=cross
+        const m00 = dx, m10 = dy, m20 = dz, m01 = sx, m11 = sy, m21 = sz, m02 = zx, m12 = zy, m22 = zz, tr = m00 + m11 + m22; let qx, qy, qz, qw;
+        if (tr > 0) { const t = Math.sqrt(tr + 1) * 2; qw = t / 4; qx = (m21 - m12) / t; qy = (m02 - m20) / t; qz = (m10 - m01) / t; }
+        else if (m00 > m11 && m00 > m22) { const t = Math.sqrt(1 + m00 - m11 - m22) * 2; qw = (m21 - m12) / t; qx = t / 4; qy = (m01 + m10) / t; qz = (m02 + m20) / t; }
+        else if (m11 > m22) { const t = Math.sqrt(1 + m11 - m00 - m22) * 2; qw = (m02 - m20) / t; qx = (m01 + m10) / t; qy = t / 4; qz = (m12 + m21) / t; }
+        else { const t = Math.sqrt(1 + m22 - m00 - m11) * 2; qw = (m10 - m01) / t; qx = (m02 + m20) / t; qy = (m12 + m21) / t; qz = t / 4; }
+        const o = n * 12, k = 1 - j / (KELP_SEG - 1) * 0.7, w = S.w * k;
+        I[o] = (P[a] + P[b]) / 2; I[o + 1] = (P[a + 1] + P[b + 1]) / 2; I[o + 2] = (P[a + 2] + P[b + 2]) / 2; I[o + 3] = 3;
+        I[o + 4] = qx; I[o + 5] = qy; I[o + 6] = qz; I[o + 7] = qw; I[o + 8] = l * 0.78; I[o + 9] = w * 1.45; I[o + 10] = w * 0.55; I[o + 11] = S.hue; n++;
+      }
+    }
+    Kp.count = n; return n;
+  };
+  return Kp;
+}
 //#region SHADERS
 const WGSL = /* wgsl */`
 struct G {
@@ -1096,12 +1190,14 @@ fn qrot(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
   var pw = 50.0;
   if (i.kind > 0.5) { base = vec3<f32>(0.015, 0.016, 0.02); pw = 220.0; }
   if (i.kind > 1.5) { base = vec3<f32>(0.92, 0.97, 1.0); pw = 60.0; }
+  if (i.kind > 2.5) { base = mix(vec3<f32>(0.07, 0.42, 0.26), vec3<f32>(0.30, 0.68, 0.38), i.shade); pw = 90.0; }
   let sp = pow(max(dot(N, h), 0.0), pw);
   let fres = pow(1.0 - max(dot(N, V), 0.0), 4.0);
   let ao = mix(0.65, 1.0, smoothstep(0.0, 0.05, i.wp.y));
   var col = base * (0.30 + 0.9 * ndl * k) * ao + vec3<f32>(sp * 0.7 * k) + env(reflect(-V, N)) * fres * 0.25;
   if (i.kind < 0.5) { col = col + g.glow.rgb * lu() * 0.25 * i.shade; }
-  if (i.kind > 1.5) { col = base * (0.55 + 0.45 * ndl) + vec3<f32>(sp * 0.4); }
+  if (i.kind > 1.5 && i.kind < 2.5) { col = base * (0.55 + 0.45 * ndl) + vec3<f32>(sp * 0.4); }
+  if (i.kind > 2.5) { let tr = pow(1.0 - max(dot(N, V), 0.0), 2.0); col = base * (0.30 + 0.75 * ndl * k) * ao + vec3<f32>(sp * 0.55 * k) + base * tr * 0.55 + g.glow.rgb * lu() * 0.45 * i.shade; }
   return vec4<f32>(col, 1.0);
 }
 
@@ -1410,12 +1506,12 @@ const WAYS = [
 // ---------------------------------------------------------------- state
 let huntCool = 0;
 function bodyCentre() { const p = world.pos, n = world.nv; let x = 0, y = 0, z = 0; for (let i = 0; i < n; i++) { x += p[3 * i]; y += p[3 * i + 1]; z += p[3 * i + 2]; } return [x / n, y / n, z / n]; }
-const ST = { way: 0, lu: 0, luT: 0, eyeExt: 1, eyeT: 1, swishT: 0, ocean: false, swim: false, gulpT: -1, mesh: false, slow: false, pause: false, twist: false, firm: 0.55, damp: 0.35, nsub: 4, cell: 0.05 };
+const ST = { way: 0, lu: 0, luT: 0, eyeExt: 1, eyeT: 1, swishT: 0, ocean: false, swim: false, kelp: true, gulpT: -1, mesh: false, slow: false, pause: false, twist: false, firm: 0.55, damp: 0.35, nsub: 4, cell: 0.05 };
 const cam = { yaw: -0.95, pitch: 0.62, dist: 4.7, tx: 1.35, ty: 0.12, tz: 0 };
 const sm = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
 // ---------------------------------------------------------------- gpu
-let device, ctx, fmt, world, krill, gpuOK = false;
+let device, ctx, fmt, world, krill, kelp, gpuOK = false;
 let bgl, sampler, dummy = {}, shF, shB, shFv, shBv;
 let pipes = {}, buf = {}, vrs = [];
 const U_FLOATS = 620, U_BYTES = U_FLOATS * 4, SH = 1024;
@@ -1470,7 +1566,7 @@ function initPipelines() {
   buf.sphV = device.createBuffer({ size: sp.length * 4, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST }); device.queue.writeBuffer(buf.sphV, 0, new Float32Array(sp));
   buf.sphI = device.createBuffer({ size: si.length * 4, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST }); device.queue.writeBuffer(buf.sphI, 0, new Uint32Array(si));
   buf.sphN = si.length;
-  buf.inst = device.createBuffer({ size: (KMAX + 2 + 64) * 48, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+  buf.inst = device.createBuffer({ size: (KMAX + 2 + 64 + KELP_INST) * 48, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
 }
 
 function makeVR(w, h) {
@@ -1495,7 +1591,7 @@ function destroyVR(vr) { for (const k of ['scene', 'back', 'sceneD', 'backD']) v
 const VBU = GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST, IBU = GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST;
 function loadWorld(cell) {
   if (buf.pos) for (const k of ['pos', 'nrm', 'bnrm', 'rest', 'tri', 'blob', 'edge']) buf[k].destroy();
-  world = createWorld(cell); krill = createKrill(world);
+  world = createWorld(cell); krill = createKrill(world); kelp = createKelp(world);
   const nv = world.nv, L = world.L;
   buf.pos = device.createBuffer({ size: nv * 12, usage: VBU }); buf.nrm = device.createBuffer({ size: nv * 12, usage: VBU }); buf.bnrm = device.createBuffer({ size: nv * 12, usage: VBU });
   buf.rest = device.createBuffer({ size: nv * 16, usage: VBU });
@@ -1551,6 +1647,7 @@ function advance(dtReal) {
   }
   world.step(dt);
   krill.step(dt, steer);
+  if (ST.kelp) kelp.step(dt);
   simMs = simMs * 0.9 + (performance.now() - t0) * 0.1;
   adaptT += dtReal;
   if (adaptT > 0.6) { adaptT = 0; if (simMs > 17 && ST.nsub > 2) ST.nsub--; else if (simMs < 7 && ST.nsub < 5) ST.nsub++; }
@@ -1583,8 +1680,10 @@ function updateInstances() {
     I[o + 4] = 0; I[o + 5] = 0; I[o + 6] = 0; I[o + 7] = 1; I[o + 8] = I[o + 9] = I[o + 10] = 0.019; I[o + 11] = 0;
   }
   device.queue.writeBuffer(buf.inst, 0, I, 0, (n + 2) * 12);
-  if (xrS && xiN) { device.queue.writeBuffer(buf.inst, (n + 2) * 48, XI, 0, xiN * 12); return n + 2 + xiN; }
-  return n + 2;
+  let tot = n + 2;
+  if (xrS && xiN) { device.queue.writeBuffer(buf.inst, tot * 48, XI, 0, xiN * 12); tot += xiN; }
+  if (ST.kelp) { const kn = kelp.fill(); device.queue.writeBuffer(buf.inst, tot * 48, kelp.inst, 0, kn * 12); tot += kn; }
+  return tot;
 }
 
 // ---------------------------------------------------------------- encode
@@ -1703,6 +1802,7 @@ function initUI() {
   $('cMesh').onchange = e => { ST.mesh = e.target.checked; if (xrS) xrS.dirty = true; };
   $('cPause').onchange = e => { ST.pause = e.target.checked; if (xrS) xrS.dirty = true; };
   $('cTwist').onchange = e => { ST.twist = e.target.checked; };
+  $('cKelp').onchange = e => { ST.kelp = e.target.checked; if (xrS) xrS.dirty = true; };
   $('sDetail').onchange = e => { ST.cell = +e.target.value; loadWorld(ST.cell); sync(); };
   sync();
 }
@@ -1746,7 +1846,7 @@ function bindPointer() {
 // ---------------------------------------------------------------- WebXR (WebGPU binding): VR + AR placement + floating menu + hand pinch
 let xrS = null, panelRes = null; const xrErrs = []; let fmt0 = null;
 function setFmt(f) { for (const v of vrs) if (v) destroyVR(v); vrs = []; fmt = f; initPipelines(); panelRes = null; resize(); }
-const PNW = 640, PNH = 1130, PIW = 720, PIH = 380;
+const PNW = 640, PNH = 1216, PIW = 720, PIH = 380;
 const stepItem = (label, y, get, set, extra = {}) => Object.assign({ kind: 'stepper', label, x: 28, y, w: 584, h: 70, get, set }, extra);
 const sizeItem = y => stepItem('Size', y, () => (xrS.pl.scale - 0.06) / 0.24, v => { xrS.pl.scale = 0.06 + v * 0.24; applyPlace(xrS.pl); });
 const turnItem = y => stepItem('Turn', y, () => (((xrS.pl.yaw / (2 * Math.PI)) % 1) + 1) % 1, v => { xrS.pl.yaw = v * 2 * Math.PI; applyPlace(xrS.pl); }, { step: 1 / 12, wrap: true });
@@ -1760,9 +1860,10 @@ const VR_ITEMS = (() => {
   add('stepper', 'Firmness', 28, 584, 70, { y: 526, get: () => ST.firm, set: v => { ST.firm = v; $('sFirm').value = v * 100; $('oFirm').textContent = Math.round(v * 100); } });
   add('stepper', 'Damping', 28, 584, 70, { y: 606, get: () => ST.damp, set: v => { ST.damp = v; $('sDamp').value = v * 100; $('oDamp').textContent = Math.round(v * 100); } });
   [['¼ speed', 'slow', 'cSlow'], ['Show mesh', 'mesh', 'cMesh'], ['Pause', 'pause', 'cPause']].forEach((t, i) => add('btn', t[0], 28 + i * 200, 190, 66, { y: 696, on: () => ST[t[1]], fn: () => { ST[t[1]] = !ST[t[1]]; $(t[2]).checked = ST[t[1]]; } }));
-  it.push(sizeItem(786), turnItem(866));
-  add('btn', 'Move shark', 28, 284, 74, { y: 966, only: 'ar', fn: () => setMode('place') });
-  it.push(exitBtn('Exit AR', 328, 284, 966, 'ar'), exitBtn('Exit VR', 28, 584, 966, 'vr'));
+  add('btn', 'Seaweed', 28, 284, 66, { y: 772, on: () => ST.kelp, fn: () => { ST.kelp = !ST.kelp; $('cKelp').checked = ST.kelp; } });
+  it.push(sizeItem(872), turnItem(952));
+  add('btn', 'Move shark', 28, 284, 74, { y: 1052, only: 'ar', fn: () => setMode('place') });
+  it.push(exitBtn('Exit AR', 328, 284, 1052, 'ar'), exitBtn('Exit VR', 28, 584, 1052, 'vr'));
   return it;
 })();
 const PLACE_ITEMS = [sizeItem(330), turnItem(410), exitBtn('Exit AR', 28, 584, 500, null)];
