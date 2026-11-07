@@ -130,7 +130,7 @@ select{font:500 12px var(--sans);background:transparent;color:var(--ink);border:
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v8 - 11-07_22:19Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v9 - 11-07_22:30Z</p>
  </aside>
 </div>
 <script type="module">
@@ -138,7 +138,7 @@ select{font:500 12px var(--sans);background:transparent;color:var(--ink);border:
 'use strict';
 let H = 0.04, YM = 0.10;
 const LB = 3.0, G_ACC = 14.0, FLOOR_MU = 0.35;
-const MOUTH = { c: [0.02, 0.10, 0.0], r: [0.24, 0.03, 0.235] };
+const MOUTH = { c: [0.02, 0.10, 0.0], r: [0.24, 0.03, 0.205] };
 const PROFILE = [
   [0.00, 0.215, 0.200], [0.04, 0.255, 0.235], [0.10, 0.282, 0.275], [0.20, 0.288, 0.310],
   [0.28, 0.274, 0.312], [0.40, 0.230, 0.275], [0.54, 0.178, 0.222], [0.68, 0.132, 0.172],
@@ -414,6 +414,27 @@ function createWorld(cell) {
   // whole-body swimming envelope: amplitude grows smoothly from head to tail but is never zero
   const tenvS = new Float32Array(nt); for (let t = 0; t < nt; t++) { const u = Math.max(0, Math.min(1, L.tcen[3 * t] / LB)); tenvS[t] = 0.16 + 0.84 * Math.pow(u, 1.7); }
   const headIdx = [], tailIdx = []; for (let v = 0; v < nv; v++) { const x = L.rest[3 * v]; if (x < 0.4) headIdx.push(v); else if (x > LB - 0.55) tailIdx.push(v); }
+  const dorsIdx = [], ventIdx = []; for (let v = 0; v < nv; v++) { const x = L.rest[3 * v], y = L.rest[3 * v + 1]; if (x > 0.4 && x < 1.7) { if (y > 0.2) dorsIdx.push(v); else if (y < 0.05) ventIdx.push(v); } }
+  const cr3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  // keep the shark roughly belly-down and level: a gentle rigid righting rotation (strength 0..1)
+  function upright(dt, strength) {
+    if (!dorsIdx.length || !ventIdx.length) return;
+    const av = (idx) => { let x = 0, y = 0, z = 0; for (const v of idx) { x += pos[3 * v]; y += pos[3 * v + 1]; z += pos[3 * v + 2]; } const n = idx.length; return [x / n, y / n, z / n]; };
+    const dd = av(dorsIdx), vv = av(ventIdx), hh = av(headIdx), tt = av(tailIdx);
+    let u = [dd[0] - vv[0], dd[1] - vv[1], dd[2] - vv[2]]; const ul = Math.hypot(...u) || 1; u = u.map(c => c / ul);
+    let f = [hh[0] - tt[0], hh[1] - tt[1], hh[2] - tt[2]]; const fl = Math.hypot(...f) || 1; f = f.map(c => c / fl);
+    let w = cr3(u, [0, 1, 0]); // roll: bring the dorsal axis to vertical
+    if (u[1] < -0.2) { const m = Math.hypot(w[0], w[1], w[2]); if (m < 0.35) w = [f[0], f[1], f[2]].map(c => c * 0.9); } // upside down: roll about the body axis
+    const fh = Math.hypot(f[0], f[2]) || 1, fHor = [f[0] / fh, 0, f[2] / fh], wp = cr3(f, fHor); // pitch: level the body axis
+    const gain = 2.2 * strength, k = Math.min(1, 3 * dt);
+    const wt = [(w[0] + wp[0]) * gain, (w[1] * 0 + wp[1] * 0), (w[2] + wp[2]) * gain];
+    // current angular velocity (isotropic estimate), damp the roll/pitch parts toward the target
+    let cx = 0, cy = 0, cz = 0, Lx = 0, Ly = 0, Lz = 0, I = 0, mx = 0, my = 0, mz = 0;
+    for (let i = 0; i < nv * 3; i += 3) { cx += pos[i]; cy += pos[i + 1]; cz += pos[i + 2]; mx += vel[i]; my += vel[i + 1]; mz += vel[i + 2]; } cx /= nv; cy /= nv; cz /= nv; mx /= nv; my /= nv; mz /= nv;
+    for (let i = 0; i < nv * 3; i += 3) { const rx = pos[i] - cx, ry = pos[i + 1] - cy, rz = pos[i + 2] - cz, vx = vel[i] - mx, vy = vel[i + 1] - my, vz = vel[i + 2] - mz; Lx += ry * vz - rz * vy; Ly += rz * vx - rx * vz; Lz += rx * vy - ry * vx; I += rx * rx + ry * ry + rz * rz; }
+    const wc = [Lx / I * 1.6, Ly / I * 1.6, Lz / I * 1.6], dw = [(wt[0] - wc[0]) * k, 0, (wt[2] - wc[2]) * k];
+    for (let i = 0; i < nv * 3; i += 3) { const rx = pos[i] - cx, ry = pos[i + 1] - cy, rz = pos[i + 2] - cz; vel[i] += dw[1] * rz - dw[2] * ry; vel[i + 1] += dw[2] * rx - dw[0] * rz; vel[i + 2] += dw[0] * ry - dw[1] * rx; }
+  }
   let SWA = 0.45;
   function updateActuation() {
     SWA = S.swa || 0.45;
@@ -568,7 +589,17 @@ function createWorld(cell) {
   const SW = { home: null, wasGrab: false, om: 0 };
   function swimDrive(dt) {
     if (grabs.size) { SW.wasGrab = true; return; }
-    if (S.swim < 0.02) { SW.home = null; S.bend = 0; return; }
+    const oc = Math.max(0, Math.min(1, (S.drag - 0.05) / 0.85));
+    if (S.swim < 0.02) { // ocean gravity alone: lift off the floor to a gentle float, stay level
+      SW.home = null; S.bend = 0;
+      if (oc > 0.05) {
+        upright(dt, 0.45 * oc);
+        let cy = 0, my = 0; for (let i = 0; i < nv * 3; i += 3) { cy += pos[i + 1]; my += vel[i + 1]; } cy /= nv; my /= nv;
+        if (cy < 0.6) { const vt = Math.min(0.28, (0.6 - cy) * 1.1), k = Math.min(1, 2.5 * dt) * oc; for (let i = 1; i < nv * 3; i += 3) vel[i] += (vt - my) * k; }
+      }
+      return;
+    }
+    upright(dt, 1);
     let cx = 0, cy = 0, cz = 0, mx = 0, my = 0, mz = 0;
     for (let i = 0; i < nv * 3; i += 3) { cx += pos[i]; cy += pos[i + 1]; cz += pos[i + 2]; mx += vel[i]; my += vel[i + 1]; mz += vel[i + 2]; }
     cx /= nv; cy /= nv; cz /= nv; mx /= nv; my /= nv; mz /= nv;
@@ -598,7 +629,7 @@ function createWorld(cell) {
   function step(dtFrame) {
     S.time += dtFrame;
     updateActuation();
-    const kS = 8 * Math.pow(100, S.firm), kV = kS * 14 + 60;
+    const kS = 8 * Math.pow(100, S.firm) * (1 + 5 * Math.pow(S.firm, 4)), kV = kS * 14 + 60;
     const n = S.nsub, dt = dtFrame / n;
     // keep only colliders that can touch the jelly this frame
     nact = 0;
@@ -1181,13 +1212,13 @@ fn markings(p0: vec3<f32>, finw: f32, nrm: vec3<f32>, pf: f32) -> Mk {
   // mouth lining + teeth
   let my = g.misc.y;
   let mry = g.misc.z;
-  let qm = vec3<f32>((p0.x - 0.02) / 0.24, (p0.y - my) / mry, p0.z / 0.235);
+  let qm = vec3<f32>((p0.x - 0.02) / 0.24, (p0.y - my) / mry, p0.z / 0.205);
   let rm = length(qm);
   m.mouth = (1.0 - smoothstep(1.12, 1.55, rm)) * bodyW * (1.0 - smoothstep(0.30, 0.34, a));
-  let tp = vec2<f32>(p0.z, p0.x) / 0.0125;
+  let tp = vec2<f32>(p0.z, p0.x) / 0.0075;
   let tc = floor(tp) + vec2<f32>(0.5);
-  let td = length((tp - tc) * 0.0125);
-  m.teeth = aa(td, 0.0028, pf) * (1.0 - smoothstep(0.05, 0.075, a)) * smoothstep(0.7, 1.1, m.mouth + 0.35) * (1.0 - smoothstep(0.2, 0.235, abs(p0.z))) * step(0.5, m.mouth);
+  let td = length((tp - tc) * 0.0075);
+  m.teeth = aa(td, 0.0016, pf) * (1.0 - smoothstep(0.04, 0.06, a)) * smoothstep(0.7, 1.1, m.mouth + 0.35) * (1.0 - smoothstep(0.17, 0.2, abs(p0.z))) * step(0.5, m.mouth);
 
   // eyes (rim + dark patch) and spiracles
   let eA = g.eyeP.xyz;
@@ -1269,9 +1300,11 @@ fn markings(p0: vec3<f32>, finw: f32, nrm: vec3<f32>, pf: f32) -> Mk {
   col = mix(col, slitCol * (0.35 + 0.65 * wrap), mk.slit * 0.92);
 
   // mouth lining, teeth, spiracles
-  let lining = vec3<f32>(0.035, 0.009, 0.014) * (0.5 + 0.5 * wrap) + vec3<f32>(0.10, 0.012, 0.02) * pow(1.0 - ndv, 2.0) + vec3<f32>(spec * 0.5);
-  col = mix(col, lining, mk.mouth * 0.97);
-  col = mix(col, vec3<f32>(0.93, 0.91, 0.84) * (0.5 + 0.5 * wrap), mk.teeth * 0.9);
+  let lining = vec3<f32>(0.045, 0.030, 0.032) * (0.5 + 0.5 * wrap) + vec3<f32>(0.075, 0.035, 0.04) * pow(1.0 - ndv, 2.0) + vec3<f32>(spec * 0.4);
+  col = mix(col, lining, mk.mouth * 0.95);
+  let lipB = smoothstep(0.55, 1.0, mk.mouth) * (1.0 - smoothstep(0.93, 1.0, mk.mouth)); // pale lip rim around the opening
+  col = mix(col, vec3<f32>(0.80, 0.77, 0.72) * (0.55 + 0.45 * wrap), lipB * 0.55);
+  col = mix(col, vec3<f32>(0.90, 0.88, 0.82) * (0.5 + 0.5 * wrap), mk.teeth * 0.28);
   col = mix(col, vec3<f32>(0.01, 0.01, 0.012), mk.spir * 0.92);
 
   return vec4<f32>(tonemap(col * g.bgLow.w), 1.0);
@@ -1828,14 +1861,16 @@ function bridgeEnd(br) { // copy the WebGPU result into the XR framebuffer
   const gl = br.gl;
   gl.bindFramebuffer(gl.FRAMEBUFFER, br.layer.framebuffer);
   gl.viewport(0, 0, br.fw, br.fh); gl.disable(gl.BLEND); gl.disable(gl.DEPTH_TEST); gl.disable(gl.SCISSOR_TEST); gl.disable(gl.CULL_FACE); gl.colorMask(true, true, true, true);
+  const glE = (tag) => { const e = gl.getError(); if (e) { xrErrs.push('GL ' + e + ' @' + tag); if (xrErrs.length > 3) xrErrs.shift(); if (xrS) xrS.errAt = frameN; } };
+  glE('pre');
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, br.tex);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, br.cv);
+  glE('state'); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, br.cv); glE('tex');
   gl.useProgram(br.pg); gl.uniform1i(gl.getUniformLocation(br.pg, 'T'), 0); gl.uniform2f(gl.getUniformLocation(br.pg, 'S'), br.fw, br.fh);
   gl.bindVertexArray(br.vao); gl.drawArrays(gl.TRIANGLES, 0, 3);
-  const ge = gl.getError(); if (ge) { xrErrs.push('GL error ' + ge); if (xrErrs.length > 3) xrErrs.shift(); }
+  glE('draw');
   // status squares (bottom of each eye): green = copy path alive, red = an error was seen
-  gl.enable(gl.SCISSOR_TEST); const bad = xrErrs.length > 0; gl.clearColor(bad ? 0.9 : 0.1, bad ? 0.1 : 0.9, 0.1, 1);
+  gl.enable(gl.SCISSOR_TEST); const bad = xrS && frameN - (xrS.errAt || -999) < 120; gl.clearColor(bad ? 0.9 : 0.1, bad ? 0.1 : 0.9, 0.1, 1);
   for (const x0 of [br.fw * 0.25, br.fw * 0.75]) { const w = br.fw * 0.06; gl.scissor(x0 - w / 2, br.fh * 0.35, w, w); gl.clear(gl.COLOR_BUFFER_BIT); }
   gl.disable(gl.SCISSOR_TEST);
 }
@@ -2149,7 +2184,7 @@ async function boot() {
     if (!adapter) throw new Error('no adapter');
     device = await adapter.requestDevice();
     device.lost.then(i => console.warn('GPU device lost', i.reason, i.message, Math.round(performance.now())));
-    device.addEventListener && device.addEventListener('uncapturederror', e => { console.error('WebGPU:', e.error.message); xrErrs.push(String(e.error.message).split('\n')[0].slice(0, 110)); if (xrErrs.length > 3) xrErrs.shift(); if (xrS) xrS.dirty = true; });
+    device.addEventListener && device.addEventListener('uncapturederror', e => { console.error('WebGPU:', e.error.message); xrErrs.push(String(e.error.message).split('\n')[0].slice(0, 110)); if (xrErrs.length > 3) xrErrs.shift(); if (xrS) { xrS.dirty = true; xrS.errAt = frameN; } });
     ctx = canvas.getContext('webgpu'); fmt = navigator.gpu.getPreferredCanvasFormat();
     ctx.configure({ device, format: fmt, alphaMode: 'opaque' });
     ST.cell = (window.matchMedia('(max-width:820px)').matches || /Quest|Mobile/i.test(navigator.userAgent)) ? 0.06 : 0.05;
