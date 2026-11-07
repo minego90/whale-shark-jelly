@@ -128,7 +128,7 @@ select{font:500 12px var(--sans);background:transparent;color:var(--ink);border:
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v4 - 11-07_21:49Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v5 - 11-07_21:54Z</p>
  </aside>
 </div>
 <script type="module">
@@ -1728,6 +1728,7 @@ async function enterXR(ar) {
     const session = await navigator.xr.requestSession(ar ? 'immersive-ar' : 'immersive-vr', { requiredFeatures: ['local-floor'], optionalFeatures: ar ? ['hit-test', 'hand-tracking'] : ['hand-tracking'] });
     // Default path: render with WebGPU into an offscreen canvas and copy it into a normal WebGL XR layer
     // (Quest Browser has no XRGPUBinding unless flags are set). Add #gpu to the URL to try the native binding.
+    xrErrs.length = 0;
     let binding = null, layer = null, gl = null, br = null, pref = null, mode = 'bridge';
     if (DBG.has('gpu') && typeof XRGPUBinding !== 'undefined') {
       try {
@@ -1751,9 +1752,9 @@ async function enterXR(ar) {
       const mk = (vs, fs, topo, blend) => device.createRenderPipeline({ layout: pl, vertex: { module: mod, entryPoint: vs }, fragment: { module: mod, entryPoint: fs, targets: [blend ? Object.assign({ format: fmt }, bl2) : { format: fmt }] }, primitive: { topology: topo }, depthStencil: ds });
       const pPanel = mk('vsPanel', 'fsPanel', 'triangle-list', true), pLaser = mk('vsLaser', 'fsLaser', 'line-list', false);
       const pRing = mk('vsRing', 'fsRing', 'triangle-list', true), pArrow = mk('vsArrow', 'fsRing', 'triangle-list', true);
-      const ub = device.createBuffer({ size: 256, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-      const bg = device.createBindGroup({ layout: bl, entries: [{ binding: 0, resource: { buffer: ub } }, { binding: 1, resource: tex.createView() }, { binding: 2, resource: sampler }] });
-      panelRes = { cv, tex, pPanel, pLaser, pRing, pArrow, ub, bg, data: new Float32Array(48) };
+      const ubs = [0, 1].map(() => device.createBuffer({ size: 256, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST })); // one per eye: queue.writeBuffer lands before the submit, so a shared buffer would give both eyes the last matrix
+      const bgs = ubs.map(ub => device.createBindGroup({ layout: bl, entries: [{ binding: 0, resource: { buffer: ub } }, { binding: 1, resource: tex.createView() }, { binding: 2, resource: sampler }] }));
+      panelRes = { cv, tex, pPanel, pLaser, pRing, pArrow, ubs, bgs, data: new Float32Array(48) };
     }
     xrS = { session, binding, layer, br, xm: mode, ref, ar, dirty: true, hover: -1, grab: null, pgrab: null, panelPose: null, last: 0, mode: 'play', items: [], hts: new Map(), viewerHT: null, noHT: false, ret: { ok: false, t: 0, pos: [0, 0, -0.7] }, pl: { pos: [0, ar ? 0 : 0.82, -0.7], yaw: 0, scale: ar ? 0.16 : 0.14 }, yawSet: !ar, pinch: new Set(), frames: 0, diag: `v${document.getElementById('verTag').textContent.replace('Build ','')} ${ar ? 'AR' : 'VR'} ${mode} blend:${session.environmentBlendMode || '?'} fmt:${fmt}${br ? ' fbL:' + br.layer.framebufferWidth + 'x' + br.layer.framebufferHeight : ''}` };
     setMode(ar ? 'place' : 'play'); applyPlace(xrS.pl);
@@ -1938,8 +1939,8 @@ function xrFrameInner(t, frame, s) {
     d.set(vpXR, 0); d.set([P0.c[0], P0.c[1], P0.c[2], 0], 16); d.set([P0.r[0] * P0.hw, P0.r[1] * P0.hw, P0.r[2] * P0.hw, 0], 20); d.set([0, P0.hh, 0, 0], 24);
     if (laser) { d.set([...laser[0], 0], 28); d.set([...laser[1], 0], 32); }
     d.set([s.pl.pos[0], s.pl.pos[1] + 0.003, s.pl.pos[2], R], 36); d.set([-hc, 0, hs, 1], 40);
-    device.queue.writeBuffer(panelRes.ub, 0, d);
-    p.setBindGroup(0, panelRes.bg);
+    device.queue.writeBuffer(panelRes.ubs[vi & 1], 0, d);
+    p.setBindGroup(0, panelRes.bgs[vi & 1]);
     if (ringOn) { p.setPipeline(panelRes.pRing); p.draw(384, 2); p.setPipeline(panelRes.pArrow); p.draw(3); }
     p.setPipeline(panelRes.pPanel); p.draw(6);
     if (laser) { p.setPipeline(panelRes.pLaser); p.draw(2); }
