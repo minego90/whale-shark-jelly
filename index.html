@@ -131,7 +131,7 @@ select{font:500 12px var(--sans);background:transparent;color:var(--ink);border:
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v10 - 11-07_22:36Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v11 - 11-07_22:44Z</p>
  </aside>
 </div>
 <script type="module">
@@ -195,7 +195,7 @@ function makeFin(o) {
   const S = nrm3(o.S);
   let Cd = o.Cd || [1, 0, 0]; const dd = dot3(Cd, S); Cd = nrm3([Cd[0] - S[0] * dd, Cd[1] - S[1] * dd, Cd[2] - S[2] * dd]);
   const N = o.flat ? [0, 1, 0] : nrm3(cross3(S, Cd));
-  return Object.assign({ tau0: 0.026, tauTip: 0.010 }, o, { S, Cd, N });
+  return Object.assign({ tau0: 0.040, tauTip: 0.021 }, o, { S, Cd, N });
 }
 function finSdf(f, x, y, z) {
   const rx = x - f.O[0], ry = y - f.O[1], rz = z - f.O[2];
@@ -336,6 +336,30 @@ function buildLattice() {
       if (inner[id] && !(ni >= 0 && nj >= 0 && nk >= 0 && ni < NX && nj < NY && nk < NZ && inner[cIdx(ni, nj, nk)])) addQuad(blob, q);
     }
   }
+  // round off the voxel stair-steps: tangential Laplacian smoothing of the surface, then re-project onto the SDF
+  {
+    const nb = Array.from({ length: nv }, () => new Set());
+    for (let q = 0; q < tri.length; q += 3) { const a = tri[q], b = tri[q + 1], c = tri[q + 2]; nb[a].add(b); nb[a].add(c); nb[b].add(a); nb[b].add(c); nb[c].add(a); nb[c].add(b); }
+    const surf = []; for (let v = 0; v < nv; v++) if (nb[v].size) surf.push(v);
+    const tmp = new Float32Array(rest.length);
+    for (let pass = 0; pass < 3; pass++) {
+      for (const v of surf) { let x = 0, y = 0, z = 0, n = 0; for (const u of nb[v]) { x += rest[3 * u]; y += rest[3 * u + 1]; z += rest[3 * u + 2]; n++; } tmp[3 * v] = rest[3 * v] + (x / n - rest[3 * v]) * 0.5; tmp[3 * v + 1] = rest[3 * v + 1] + (y / n - rest[3 * v + 1]) * 0.5; tmp[3 * v + 2] = rest[3 * v + 2] + (z / n - rest[3 * v + 2]) * 0.5; }
+      for (const v of surf) {
+        let x = tmp[3 * v], y = tmp[3 * v + 1], z = tmp[3 * v + 2];
+        for (let it = 0; it < 2; it++) {
+          const d = sdfAll(x, y, z), gx = sdfAll(x + eps, y, z) - sdfAll(x - eps, y, z), gy = sdfAll(x, y + eps, z) - sdfAll(x, y - eps, z), gz = sdfAll(x, y, z + eps) - sdfAll(x, y, z - eps);
+          const gl = gx * gx + gy * gy + gz * gz; if (gl < 1e-9) break; const sc = d / (gl / (4 * eps * eps)); x -= gx / (2 * eps) * sc; y -= gy / (2 * eps) * sc; z -= gz / (2 * eps) * sc;
+        }
+        const mv = Math.hypot(x - lat[3 * v], y - lat[3 * v + 1], z - lat[3 * v + 2]), lim = 0.9 * H; if (mv > lim) { const k = lim / mv; x = lat[3 * v] + (x - lat[3 * v]) * k; y = lat[3 * v + 1] + (y - lat[3 * v + 1]) * k; z = lat[3 * v + 2] + (z - lat[3 * v + 2]) * k; }
+        rest[3 * v] = x; rest[3 * v + 1] = Math.max(0, y); rest[3 * v + 2] = z;
+      }
+    }
+    for (let pass = 0; pass < 8; pass++) { // undo any tet the smoothing folded over
+      let bad = 0;
+      for (let t = 0; t < nt; t++) if (vol(t) < 2e-8) { bad++; for (let q = 0; q < 4; q++) { const v = tet[4 * t + q] * 3; for (let c = 0; c < 3; c++) rest[v + c] += (lat[v + c] - rest[v + c]) * 0.5; } }
+      if (!bad) break;
+    }
+  }
   // edges
   const eset = new Set(), edges = [];
   for (let t = 0; t < nt; t++) for (let a = 0; a < 3; a++) for (let b = a + 1; b < 4; b++) {
@@ -348,7 +372,7 @@ function buildLattice() {
     let x = 0, y = 0, z = 0; for (let q = 0; q < 4; q++) { const v = tet[4 * t + q] * 3; x += rest[v]; y += rest[v + 1]; z += rest[v + 2]; }
     x /= 4; y /= 4; z /= 4; tcen[3 * t] = x; tcen[3 * t + 1] = y; tcen[3 * t + 2] = z;
     const id = tcell[t];
-    tkm[t] = fin[id] ? 7 : (inner[id] ? 1.5 : 1);
+    tkm[t] = fin[id] ? 12 : (inner[id] ? 1.5 : 1);
     twj[t] = y > YM + 0.015 ? 1 : 0;
     const Wd = profileAt(x).W;
     tgm[t] = Math.exp(-Math.pow((x - 0.59) / 0.17, 4)) * smooth(0.35, 0.7, Math.abs(z) / Wd) * (fin[id] ? 0 : 1);
@@ -879,7 +903,7 @@ function createKrill(world) {
 
 
 // ---------------------------------------------------------------- seaweed (soft gel strands rooted on the floor)
-const KELP_CLUMPS = 7, KELP_PER = 3, KELP_SEG = 9, KELP_N = KELP_CLUMPS * KELP_PER, KELP_INST = KELP_N * (KELP_SEG - 1);
+const KELP_CLUMPS = 7, KELP_PER = 3, KELP_SEG = 9, KELP_N = KELP_CLUMPS * KELP_PER, KELP_SUB = 4, KELP_INST = KELP_N * (KELP_SEG - 1) * KELP_SUB;
 function createKelp(world) {
   const Kp = { n: KELP_N, inst: new Float32Array(KELP_INST * 12), count: 0 };
   const P = new Float32Array(KELP_N * KELP_SEG * 3), Pv = new Float32Array(KELP_N * KELP_SEG * 3), Pp = new Float32Array(KELP_N * KELP_SEG * 3);
@@ -888,8 +912,8 @@ function createKelp(world) {
   for (let c = 0; c < KELP_CLUMPS; c++) {
     const th = (c + 0.2 + rnd() * 0.6) / KELP_CLUMPS * 2 * Math.PI, rr = 1.95 + rnd() * 0.4, cx = 1.5 + Math.cos(th) * rr, cz = Math.sin(th) * rr;
     for (let m = 0; m < KELP_PER; m++) {
-      const i = c * KELP_PER + m, bx = cx + (rnd() - 0.5) * 0.28, bz = cz + (rnd() - 0.5) * 0.28, sp = 0.10 + rnd() * 0.07;
-      st.push({ bx, bz, sp, w: 0.034 + rnd() * 0.014, ph: rnd() * 6.28, side: [rnd() - 0.5, 0.2, rnd() - 0.5], hue: rnd() });
+      const i = c * KELP_PER + m, bx = cx + (rnd() - 0.5) * 0.28, bz = cz + (rnd() - 0.5) * 0.28, sp = 0.14 + rnd() * 0.08;
+      st.push({ bx, bz, sp, w: 0.050 + rnd() * 0.016, ph: rnd() * 6.28, side: [rnd() - 0.5, 0.2, rnd() - 0.5], hue: rnd() });
       for (let j = 0; j < KELP_SEG; j++) { const o = (i * KELP_SEG + j) * 3; P[o] = bx; P[o + 1] = j * sp; P[o + 2] = bz; Pp[o] = bx; Pp[o + 1] = j * sp; Pp[o + 2] = bz; }
     }
   }
@@ -960,9 +984,12 @@ function createKelp(world) {
         else if (m00 > m11 && m00 > m22) { const t = Math.sqrt(1 + m00 - m11 - m22) * 2; qw = (m21 - m12) / t; qx = t / 4; qy = (m01 + m10) / t; qz = (m02 + m20) / t; }
         else if (m11 > m22) { const t = Math.sqrt(1 + m11 - m00 - m22) * 2; qw = (m02 - m20) / t; qx = (m01 + m10) / t; qy = t / 4; qz = (m12 + m21) / t; }
         else { const t = Math.sqrt(1 + m22 - m00 - m11) * 2; qw = (m10 - m01) / t; qx = (m02 + m20) / t; qy = (m12 + m21) / t; qz = t / 4; }
-        const o = n * 12, k = 1 - j / (KELP_SEG - 1) * 0.7, w = S.w * k;
-        I[o] = (P[a] + P[b]) / 2; I[o + 1] = (P[a + 1] + P[b + 1]) / 2; I[o + 2] = (P[a + 2] + P[b + 2]) / 2; I[o + 3] = 3;
-        I[o + 4] = qx; I[o + 5] = qy; I[o + 6] = qz; I[o + 7] = qw; I[o + 8] = l * 0.78; I[o + 9] = w * 1.45; I[o + 10] = w * 0.55; I[o + 11] = S.hue; n++;
+        for (let m = 0; m < KELP_SUB; m++) { // overlapping slices -> one continuous ribbon with zebra bands
+          const f = (m + 0.5) / KELP_SUB, o = n * 12, k = 1 - (j + f) / (KELP_SEG - 1) * 0.55, w = S.w * k;
+          I[o] = P[a] + (P[b] - P[a]) * f; I[o + 1] = P[a + 1] + (P[b + 1] - P[a + 1]) * f; I[o + 2] = P[a + 2] + (P[b + 2] - P[a + 2]) * f; I[o + 3] = 3;
+          I[o + 4] = qx; I[o + 5] = qy; I[o + 6] = qz; I[o + 7] = qw; I[o + 8] = l / KELP_SUB * 0.72; I[o + 9] = w * 1.9; I[o + 10] = 0.011;
+          I[o + 11] = ((j * KELP_SUB + m) & 1) ? 0.9 : 0.12; n++;
+        }
       }
     }
     Kp.count = n; return n;
@@ -1190,7 +1217,7 @@ fn qrot(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
   var pw = 50.0;
   if (i.kind > 0.5) { base = vec3<f32>(0.015, 0.016, 0.02); pw = 220.0; }
   if (i.kind > 1.5) { base = vec3<f32>(0.92, 0.97, 1.0); pw = 60.0; }
-  if (i.kind > 2.5) { base = mix(vec3<f32>(0.07, 0.42, 0.26), vec3<f32>(0.30, 0.68, 0.38), i.shade); pw = 90.0; }
+  if (i.kind > 2.5) { base = mix(vec3<f32>(0.03, 0.22, 0.13), vec3<f32>(0.13, 0.46, 0.25), i.shade); pw = 90.0; }
   let sp = pow(max(dot(N, h), 0.0), pw);
   let fres = pow(1.0 - max(dot(N, V), 0.0), 4.0);
   let ao = mix(0.65, 1.0, smoothstep(0.0, 0.05, i.wp.y));
@@ -1970,10 +1997,6 @@ function bridgeEnd(br) { // copy the WebGPU result into the XR framebuffer
   gl.useProgram(br.pg); gl.uniform1i(gl.getUniformLocation(br.pg, 'T'), 0); gl.uniform2f(gl.getUniformLocation(br.pg, 'S'), br.fw, br.fh);
   gl.bindVertexArray(br.vao); gl.drawArrays(gl.TRIANGLES, 0, 3);
   glE('draw');
-  // status squares (bottom of each eye): green = copy path alive, red = an error was seen
-  gl.enable(gl.SCISSOR_TEST); const bad = xrS && frameN - (xrS.errAt || -999) < 120; gl.clearColor(bad ? 0.9 : 0.1, bad ? 0.1 : 0.9, 0.1, 1);
-  for (const x0 of [br.fw * 0.25, br.fw * 0.75]) { const w = br.fw * 0.06; gl.scissor(x0 - w / 2, br.fh * 0.35, w, w); gl.clear(gl.COLOR_BUFFER_BIT); }
-  gl.disable(gl.SCISSOR_TEST);
 }
 // per-view target: viewport (WebGPU, top-left origin) + colour view
 function xrSub(s, view) {
