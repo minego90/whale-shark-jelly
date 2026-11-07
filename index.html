@@ -128,7 +128,7 @@ select{font:500 12px var(--sans);background:transparent;color:var(--ink);border:
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v3 - 11-07_21:44Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v4 - 11-07_21:49Z</p>
  </aside>
 </div>
 <script type="module">
@@ -1368,7 +1368,7 @@ function makeVR(w, h) {
   vr.data = new Float32Array(U_FLOATS);
   return vr;
 }
-function destroyVR(vr) { for (const k of ['scene', 'back', 'sceneD', 'backD']) vr[k].destroy(); vr.gBuf.destroy(); }
+function destroyVR(vr) { for (const k of ['scene', 'back', 'sceneD', 'backD']) vr[k].destroy(); vr.gBuf.destroy(); if (vr.eye) vr.eye.destroy(); }
 
 const VBU = GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST, IBU = GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST;
 function loadWorld(cell) {
@@ -1698,8 +1698,8 @@ function makeBridge(session) {
 }
 function bridgeBegin(br) { // acquire the offscreen WebGPU target for this frame
   const fw = br.layer.framebufferWidth, fh = br.layer.framebufferHeight;
-  if (fw !== br.fw || fh !== br.fh) { br.fw = fw; br.fh = fh; br.cv.width = fw; br.cv.height = fh; br.gctx.configure({ device, format: fmt, alphaMode: 'premultiplied', usage: GPUTextureUsage.RENDER_ATTACHMENT }); }
-  br.cur = br.gctx.getCurrentTexture().createView();
+  if (fw !== br.fw || fh !== br.fh) { br.fw = fw; br.fh = fh; br.cv.width = fw; br.cv.height = fh; br.gctx.configure({ device, format: fmt, alphaMode: 'premultiplied', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST }); }
+  br.curTex = br.gctx.getCurrentTexture();
 }
 function bridgeEnd(br) { // copy the WebGPU result into the XR framebuffer
   const gl = br.gl;
@@ -1720,7 +1720,7 @@ function bridgeEnd(br) { // copy the WebGPU result into the XR framebuffer
 function xrSub(s, view) {
   if (s.xm === 'gpu') { const sub = s.binding.getViewSubImage(s.layer, view); return { vp: sub.viewport, cv: sub.colorTexture.createView(sub.getViewDescriptor ? sub.getViewDescriptor() : undefined) }; }
   const g = s.layer.getViewport(view), br = s.br;
-  return { vp: { x: g.x, y: br.fh - g.y - g.height, width: g.width, height: g.height }, cv: br.cur };
+  return { vp: { x: g.x, y: br.fh - g.y - g.height, width: g.width, height: g.height }, cv: null };
 }
 async function enterXR(ar) {
   try {
@@ -1755,7 +1755,7 @@ async function enterXR(ar) {
       const bg = device.createBindGroup({ layout: bl, entries: [{ binding: 0, resource: { buffer: ub } }, { binding: 1, resource: tex.createView() }, { binding: 2, resource: sampler }] });
       panelRes = { cv, tex, pPanel, pLaser, pRing, pArrow, ub, bg, data: new Float32Array(48) };
     }
-    xrS = { session, binding, layer, br, xm: mode, ref, ar, dirty: true, hover: -1, grab: null, pgrab: null, panelPose: null, last: 0, mode: 'play', items: [], hts: new Map(), viewerHT: null, noHT: false, ret: { ok: false, t: 0, pos: [0, 0, -0.7] }, pl: { pos: [0, ar ? 0 : 0.82, -0.7], yaw: 0, scale: ar ? 0.16 : 0.14 }, yawSet: !ar, pinch: new Set(), frames: 0, diag: `v${document.getElementById('verTag').textContent.replace('Build ','')} ${ar ? 'AR' : 'VR'} ${mode} blend:${session.environmentBlendMode || '?'} fmt:${fmt}${br ? ' fb:' + br.fw + 'x' + br.fh : ''}` };
+    xrS = { session, binding, layer, br, xm: mode, ref, ar, dirty: true, hover: -1, grab: null, pgrab: null, panelPose: null, last: 0, mode: 'play', items: [], hts: new Map(), viewerHT: null, noHT: false, ret: { ok: false, t: 0, pos: [0, 0, -0.7] }, pl: { pos: [0, ar ? 0 : 0.82, -0.7], yaw: 0, scale: ar ? 0.16 : 0.14 }, yawSet: !ar, pinch: new Set(), frames: 0, diag: `v${document.getElementById('verTag').textContent.replace('Build ','')} ${ar ? 'AR' : 'VR'} ${mode} blend:${session.environmentBlendMode || '?'} fmt:${fmt}${br ? ' fbL:' + br.layer.framebufferWidth + 'x' + br.layer.framebufferHeight : ''}` };
     setMode(ar ? 'place' : 'play'); applyPlace(xrS.pl);
     ['selectstart', 'selectend'].forEach(n => session.addEventListener(n, ev => xrSelect(ev, n === 'selectstart')));
     if (ar) {
@@ -1928,9 +1928,11 @@ function xrFrameInner(t, frame, s) {
     if (Math.abs(nearGL - dn) < Math.abs(nearGPU - dn)) { const Z = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 1]); P = M4.mul(Z, P); }
     const V = view.transform.inverse.matrix, vpXR = M4.mul(P, V), vpSim = M4.mul(vpXR, XR_M);
     const e = view.transform.position, camSim = M4.pt(XR_MI, [e.x, e.y, e.z]), f = nrm(M4.dir(XR_MI, [-V[2], -V[6], -V[10]]));
-    writeG(vr, vpSim, camSim, f, [vp.x, vp.y]);
+    writeG(vr, vpSim, camSim, f, s.xm === 'bridge' ? [0, 0] : [vp.x, vp.y]);
     if (first) { encodeShadows(enc, vr); first = false; }
-    const p = encodeView(enc, vr, sub.cv, nInst, { x: vp.x, y: vp.y, width: vp.width, height: vp.height });
+    const bridge = s.xm === 'bridge';
+    if (bridge && !vr.eye) { vr.eye = device.createTexture({ size: [vp.width, vp.height], format: fmt, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC }); vr.eyeV = vr.eye.createView(); }
+    const p = encodeView(enc, vr, bridge ? vr.eyeV : sub.cv, nInst, bridge ? { x: 0, y: 0, width: vp.width, height: vp.height } : { x: vp.x, y: vp.y, width: vp.width, height: vp.height });
     // board + laser + placement ring (XR space)
     const d = panelRes.data, P0 = s.panelPose;
     d.set(vpXR, 0); d.set([P0.c[0], P0.c[1], P0.c[2], 0], 16); d.set([P0.r[0] * P0.hw, P0.r[1] * P0.hw, P0.r[2] * P0.hw, 0], 20); d.set([0, P0.hh, 0, 0], 24);
@@ -1942,6 +1944,7 @@ function xrFrameInner(t, frame, s) {
     p.setPipeline(panelRes.pPanel); p.draw(6);
     if (laser) { p.setPipeline(panelRes.pLaser); p.draw(2); }
     p.end();
+    if (bridge) enc.copyTextureToTexture({ texture: vr.eye }, { texture: s.br.curTex, origin: [vp.x, vp.y] }, [vp.width, vp.height]);
   }
   device.queue.submit([enc.finish()]);
   if (s.xm === 'bridge') bridgeEnd(s.br);
