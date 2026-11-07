@@ -1668,7 +1668,7 @@ function drawPanel(hover) {
 let ptrHoverSide = 0;
 async function setupXR() {
   const note = $('vrNote'), bVR = $('bVR'), bAR = $('bAR');
-  if (!navigator.xr || typeof XRGPUBinding === 'undefined') { note.textContent = 'WebXR with WebGPU (XRGPUBinding) isn’t available in this browser. On Quest, try the latest Browser and enable the WebXR/WebGPU flag.'; return; }
+  if (!navigator.xr) { note.textContent = 'WebXR isn’t available in this browser (it needs HTTPS and a headset browser such as Quest Browser).'; return; }
   let vr = false, ar = false;
   try { vr = await navigator.xr.isSessionSupported('immersive-vr'); } catch (e) { }
   try { ar = await navigator.xr.isSessionSupported('immersive-ar'); } catch (e) { }
@@ -1677,15 +1677,62 @@ async function setupXR() {
   if (vr) { bVR.disabled = false; bVR.onclick = () => enterXR(false); }
   note.textContent = (ar ? 'AR: point at a table or the floor and pinch to place the shark; the board floats at its side. ' : '') + 'Pinch on the jelly to pull it; pinch the board to press. Controllers work too (trigger).';
 }
+function makeBridge(session) {
+  const glc = document.createElement('canvas'), gl = glc.getContext('webgl2', { xrCompatible: true, alpha: true, antialias: false, depth: false, stencil: false, premultipliedAlpha: true, preserveDrawingBuffer: false });
+  if (!gl) throw new Error('WebGL2 not available for the XR layer');
+  const layer = new XRWebGLLayer(session, gl, { alpha: true, antialias: false, depth: false, stencil: false, framebufferScaleFactor: 0.8 });
+  session.updateRenderState({ baseLayer: layer });
+  const sh = (t, src) => { const o = gl.createShader(t); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error('glsl ' + gl.getShaderInfoLog(o)); return o; };
+  const pg = gl.createProgram();
+  gl.attachShader(pg, sh(gl.VERTEX_SHADER, '#version 300 es\nvoid main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));gl_Position=vec4(p*2.0-1.0,0.0,1.0);}'));
+  gl.attachShader(pg, sh(gl.FRAGMENT_SHADER, '#version 300 es\nprecision highp float;uniform sampler2D T;uniform vec2 S;out vec4 o;void main(){o=texture(T,vec2(gl_FragCoord.x/S.x,1.0-gl_FragCoord.y/S.y));}'));
+  gl.linkProgram(pg); if (!gl.getProgramParameter(pg, gl.LINK_STATUS)) throw new Error('glsl link ' + gl.getProgramInfoLog(pg));
+  const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const cv = document.createElement('canvas'), gctx = cv.getContext('webgpu');
+  const b = { gl, layer, pg, tex, cv, gctx, fw: 0, fh: 0, cur: null, vao: gl.createVertexArray() };
+  window.__br = b;
+  return b;
+}
+function bridgeBegin(br) { // acquire the offscreen WebGPU target for this frame
+  const fw = br.layer.framebufferWidth, fh = br.layer.framebufferHeight;
+  if (fw !== br.fw || fh !== br.fh) { br.fw = fw; br.fh = fh; br.cv.width = fw; br.cv.height = fh; br.gctx.configure({ device, format: fmt, alphaMode: 'premultiplied', usage: GPUTextureUsage.RENDER_ATTACHMENT }); }
+  br.cur = br.gctx.getCurrentTexture().createView();
+}
+function bridgeEnd(br) { // copy the WebGPU result into the XR framebuffer
+  const gl = br.gl;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, br.layer.framebuffer);
+  gl.viewport(0, 0, br.fw, br.fh); gl.disable(gl.BLEND); gl.disable(gl.DEPTH_TEST); gl.disable(gl.SCISSOR_TEST); gl.disable(gl.CULL_FACE); gl.colorMask(true, true, true, true);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, br.tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, br.cv);
+  gl.useProgram(br.pg); gl.uniform1i(gl.getUniformLocation(br.pg, 'T'), 0); gl.uniform2f(gl.getUniformLocation(br.pg, 'S'), br.fw, br.fh);
+  gl.bindVertexArray(br.vao); gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+// per-view target: viewport (WebGPU, top-left origin) + colour view
+function xrSub(s, view) {
+  if (s.xm === 'gpu') { const sub = s.binding.getViewSubImage(s.layer, view); return { vp: sub.viewport, cv: sub.colorTexture.createView(sub.getViewDescriptor ? sub.getViewDescriptor() : undefined) }; }
+  const g = s.layer.getViewport(view), br = s.br;
+  return { vp: { x: g.x, y: br.fh - g.y - g.height, width: g.width, height: g.height }, cv: br.cur };
+}
 async function enterXR(ar) {
   try {
     if (ST.cell < 0.06) { ST.cell = 0.06; $('sDetail').value = '0.06'; loadWorld(0.06); }
     const session = await navigator.xr.requestSession(ar ? 'immersive-ar' : 'immersive-vr', { requiredFeatures: ['local-floor'], optionalFeatures: ar ? ['hit-test', 'hand-tracking'] : ['hand-tracking'] });
-    const binding = new XRGPUBinding(session, device);
-    const pref = binding.getPreferredColorFormat ? binding.getPreferredColorFormat() : fmt;
-    if (pref && pref !== fmt) { fmt0 = fmt; setFmt(pref); }
-    const layer = binding.createProjectionLayer({ colorFormat: fmt, alphaMode: 'premultiplied' });
-    session.updateRenderState({ layers: [layer] });
+    // Default path: render with WebGPU into an offscreen canvas and copy it into a normal WebGL XR layer
+    // (Quest Browser has no XRGPUBinding unless flags are set). Add #gpu to the URL to try the native binding.
+    let binding = null, layer = null, gl = null, br = null, pref = null, mode = 'bridge';
+    if (DBG.has('gpu') && typeof XRGPUBinding !== 'undefined') {
+      try {
+        binding = new XRGPUBinding(session, device);
+        pref = binding.getPreferredColorFormat ? binding.getPreferredColorFormat() : fmt;
+        if (pref && pref !== fmt) { fmt0 = fmt; setFmt(pref); }
+        layer = binding.createProjectionLayer({ colorFormat: fmt, alphaMode: 'premultiplied' });
+        session.updateRenderState({ layers: [layer] }); mode = 'gpu';
+      } catch (e) { binding = null; layer = null; xrErrs.push('gpu binding: ' + String(e.message).slice(0, 80)); }
+    }
+    if (mode === 'bridge') { br = makeBridge(session); gl = br.gl; layer = br.layer; }
     const ref = await session.requestReferenceSpace('local-floor');
     if (!panelRes) {
       const cv = document.createElement('canvas'); cv.width = PNW; cv.height = PNH;
@@ -1702,7 +1749,7 @@ async function enterXR(ar) {
       const bg = device.createBindGroup({ layout: bl, entries: [{ binding: 0, resource: { buffer: ub } }, { binding: 1, resource: tex.createView() }, { binding: 2, resource: sampler }] });
       panelRes = { cv, tex, pPanel, pLaser, pRing, pArrow, ub, bg, data: new Float32Array(48) };
     }
-    xrS = { session, binding, layer, ref, ar, dirty: true, hover: -1, grab: null, pgrab: null, panelPose: null, last: 0, mode: 'play', items: [], hts: new Map(), viewerHT: null, noHT: false, ret: { ok: false, t: 0, pos: [0, 0, -0.7] }, pl: { pos: [0, ar ? 0 : 0.82, -0.7], yaw: 0, scale: ar ? 0.16 : 0.14 }, yawSet: !ar, pinch: new Set(), frames: 0, diag: `${ar ? 'AR' : 'VR'} blend:${session.environmentBlendMode || '?'} fmt:${fmt}${pref && pref !== fmt0 && fmt0 ? '' : ''}` };
+    xrS = { session, binding, layer, br, xm: mode, ref, ar, dirty: true, hover: -1, grab: null, pgrab: null, panelPose: null, last: 0, mode: 'play', items: [], hts: new Map(), viewerHT: null, noHT: false, ret: { ok: false, t: 0, pos: [0, 0, -0.7] }, pl: { pos: [0, ar ? 0 : 0.82, -0.7], yaw: 0, scale: ar ? 0.16 : 0.14 }, yawSet: !ar, pinch: new Set(), frames: 0, diag: `${ar ? 'AR' : 'VR'} ${mode} blend:${session.environmentBlendMode || '?'} fmt:${fmt}${br ? ' fb:' + br.fw + 'x' + br.fh : ''}` };
     setMode(ar ? 'place' : 'play'); applyPlace(xrS.pl);
     ['selectstart', 'selectend'].forEach(n => session.addEventListener(n, ev => xrSelect(ev, n === 'selectstart')));
     if (ar) {
@@ -1807,8 +1854,9 @@ function xrFrame(t, frame) {
   catch (e) {
     console.error('xrFrame', e); xrErrs.push(String(e && e.message || e).slice(0, 110)); if (xrErrs.length > 3) xrErrs.shift(); s.dirty = true;
     try { // keep the room visible: clear the layer to transparent
+      if (s.xm === 'bridge') { const gl = s.br.gl; gl.bindFramebuffer(gl.FRAMEBUFFER, s.layer.framebuffer); gl.clearColor(0, 0, 0, s.ar ? 0 : 1); gl.clear(gl.COLOR_BUFFER_BIT); return; }
       const pose = frame.getViewerPose(s.ref); if (!pose) return; const enc = device.createCommandEncoder();
-      for (const view of pose.views) { const sub = s.binding.getViewSubImage(s.layer, view); enc.beginRenderPass({ colorAttachments: [{ view: sub.colorTexture.createView(sub.getViewDescriptor ? sub.getViewDescriptor() : undefined), clearValue: { r: 0, g: 0, b: 0, a: s.ar ? 0 : 1 }, loadOp: 'clear', storeOp: 'store' }] }).end(); }
+      for (const view of pose.views) { const sub = xrSub(s, view); enc.beginRenderPass({ colorAttachments: [{ view: sub.cv, clearValue: { r: 0, g: 0, b: 0, a: s.ar ? 0 : 1 }, loadOp: 'clear', storeOp: 'store' }] }).end(); }
       device.queue.submit([enc.finish()]);
     } catch (e2) { }
   }
@@ -1863,10 +1911,10 @@ function xrFrameInner(t, frame, s) {
   applyTheme();
   const nInst = updateInstances();
   const enc = device.createCommandEncoder();
-  let first = true;
+  let first = true; if (s.xm === 'bridge') bridgeBegin(s.br);
   const ringOn = s.ar && s.mode === 'place' && s.ret.ok, R = 1.6 * s.pl.scale, hc = Math.cos(s.pl.yaw), hs = Math.sin(s.pl.yaw);
   for (let vi = 0; vi < pose.views.length; vi++) {
-    const view = pose.views[vi], sub = s.binding.getViewSubImage(s.layer, view), vp = sub.viewport;
+    const view = pose.views[vi], sub = xrSub(s, view), vp = sub.vp;
     if (!vrs[vi + 1] || vrs[vi + 1].w !== vp.width || vrs[vi + 1].h !== vp.height) { if (vrs[vi + 1]) destroyVR(vrs[vi + 1]); vrs[vi + 1] = makeVR(vp.width, vp.height); }
     const vr = vrs[vi + 1];
     let P = view.projectionMatrix; // normalise depth to WebGPU 0..1 if the UA gives GL-style clip space
@@ -1876,8 +1924,7 @@ function xrFrameInner(t, frame, s) {
     const e = view.transform.position, camSim = M4.pt(XR_MI, [e.x, e.y, e.z]), f = nrm(M4.dir(XR_MI, [-V[2], -V[6], -V[10]]));
     writeG(vr, vpSim, camSim, f, [vp.x, vp.y]);
     if (first) { encodeShadows(enc, vr); first = false; }
-    const cv = sub.colorTexture.createView(sub.getViewDescriptor ? sub.getViewDescriptor() : undefined);
-    const p = encodeView(enc, vr, cv, nInst, { x: vp.x, y: vp.y, width: vp.width, height: vp.height });
+    const p = encodeView(enc, vr, sub.cv, nInst, { x: vp.x, y: vp.y, width: vp.width, height: vp.height });
     // board + laser + placement ring (XR space)
     const d = panelRes.data, P0 = s.panelPose;
     d.set(vpXR, 0); d.set([P0.c[0], P0.c[1], P0.c[2], 0], 16); d.set([P0.r[0] * P0.hw, P0.r[1] * P0.hw, P0.r[2] * P0.hw, 0], 20); d.set([0, P0.hh, 0, 0], 24);
@@ -1891,6 +1938,7 @@ function xrFrameInner(t, frame, s) {
     p.end();
   }
   device.queue.submit([enc.finish()]);
+  if (s.xm === 'bridge') bridgeEnd(s.br);
 }
 
 // debug / export: render one frame into a texture and return RGBA bytes
