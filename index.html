@@ -1712,7 +1712,7 @@ function bridgeEnd(br) { // copy the WebGPU result into the XR framebuffer
   const ge = gl.getError(); if (ge) { xrErrs.push('GL error ' + ge); if (xrErrs.length > 3) xrErrs.shift(); }
   // status squares (bottom of each eye): green = copy path alive, red = an error was seen
   gl.enable(gl.SCISSOR_TEST); const bad = xrErrs.length > 0; gl.clearColor(bad ? 0.9 : 0.1, bad ? 0.1 : 0.9, 0.1, 1);
-  for (const x0 of [br.fw * 0.25 - 20, br.fw * 0.75 - 20]) { gl.scissor(x0, 12, 40, 14); gl.clear(gl.COLOR_BUFFER_BIT); }
+  for (const x0 of [br.fw * 0.25, br.fw * 0.75]) { const w = br.fw * 0.06; gl.scissor(x0 - w / 2, br.fh * 0.35, w, w); gl.clear(gl.COLOR_BUFFER_BIT); }
   gl.disable(gl.SCISSOR_TEST);
 }
 // per-view target: viewport (WebGPU, top-left origin) + colour view
@@ -1754,7 +1754,7 @@ async function enterXR(ar) {
       const bg = device.createBindGroup({ layout: bl, entries: [{ binding: 0, resource: { buffer: ub } }, { binding: 1, resource: tex.createView() }, { binding: 2, resource: sampler }] });
       panelRes = { cv, tex, pPanel, pLaser, pRing, pArrow, ub, bg, data: new Float32Array(48) };
     }
-    xrS = { session, binding, layer, br, xm: mode, ref, ar, dirty: true, hover: -1, grab: null, pgrab: null, panelPose: null, last: 0, mode: 'play', items: [], hts: new Map(), viewerHT: null, noHT: false, ret: { ok: false, t: 0, pos: [0, 0, -0.7] }, pl: { pos: [0, ar ? 0 : 0.82, -0.7], yaw: 0, scale: ar ? 0.16 : 0.14 }, yawSet: !ar, pinch: new Set(), frames: 0, diag: `${ar ? 'AR' : 'VR'} ${mode} blend:${session.environmentBlendMode || '?'} fmt:${fmt}${br ? ' fb:' + br.fw + 'x' + br.fh : ''}` };
+    xrS = { session, binding, layer, br, xm: mode, ref, ar, dirty: true, hover: -1, grab: null, pgrab: null, panelPose: null, last: 0, mode: 'play', items: [], hts: new Map(), viewerHT: null, noHT: false, ret: { ok: false, t: 0, pos: [0, 0, -0.7] }, pl: { pos: [0, ar ? 0 : 0.82, -0.7], yaw: 0, scale: ar ? 0.16 : 0.14 }, yawSet: !ar, pinch: new Set(), frames: 0, diag: `v3 ${ar ? 'AR' : 'VR'} ${mode} blend:${session.environmentBlendMode || '?'} fmt:${fmt}${br ? ' fb:' + br.fw + 'x' + br.fh : ''}` };
     setMode(ar ? 'place' : 'play'); applyPlace(xrS.pl);
     ['selectstart', 'selectend'].forEach(n => session.addEventListener(n, ev => xrSelect(ev, n === 'selectstart')));
     if (ar) {
