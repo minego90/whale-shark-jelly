@@ -65,6 +65,16 @@ select{font:500 12px var(--sans);background:transparent;color:var(--ink);border:
  .ro dd{font-size:19px}
  .foot{gap:8px}
 }
+
+/* dark glass windows */
+.panel,details.notes,.readouts{--ink:#e9eef0;--mute:#9fb0ba;--rule:rgba(233,238,240,.16);--panel:rgba(255,255,255,.06);color:var(--ink);background:linear-gradient(160deg,rgba(26,34,44,.62),rgba(10,15,22,.52));-webkit-backdrop-filter:blur(18px) saturate(1.3);backdrop-filter:blur(18px) saturate(1.3);border:1px solid rgba(255,255,255,.16);box-shadow:0 10px 36px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.14)}
+.page{display:block}
+.panel{position:fixed;right:12px;top:12px;bottom:12px;width:316px;height:auto;border-radius:20px;z-index:5}
+.readouts{border-radius:14px;padding:8px 14px;pointer-events:none}
+details.notes{border-radius:14px}
+body.dark .panel{background:linear-gradient(160deg,rgba(26,34,44,.62),rgba(10,15,22,.52))}
+.panel button,.panel select,.panel input{color-scheme:dark}
+@media (max-width:820px){.panel{left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:46svh;border-radius:18px}.stage{height:100svh}}
 </style>
 </head>
 <body>
@@ -112,6 +122,7 @@ select{font:500 12px var(--sans);background:transparent;color:var(--ink);border:
    <button class="act" id="bLight" aria-pressed="false">Light up</button>
    <button class="act" id="bOcean" aria-pressed="false">Ocean gravity</button>
    <button class="act" id="bSwim" aria-pressed="false">Swim</button>
+   <button class="act" id="bLure" aria-pressed="false">Follow my food</button>
    <button class="act" id="bKrill">Scatter krill</button>
    <button class="act ghost" id="bReset">Reset</button>
   </div>
@@ -131,7 +142,7 @@ select{font:500 12px var(--sans);background:transparent;color:var(--ink);border:
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v12 - 11-07_22:50Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v13 - 11-07_22:53Z</p>
  </aside>
 </div>
 <script type="module">
@@ -639,10 +650,10 @@ function createWorld(cell) {
     // keep the loop near where it started: steer back when it strays
     const dx = SW.home[0] - cx, dz = SW.home[1] - cz, dh = Math.hypot(dx, dz);
     let wT = S.turn, cr_ = S.cruise, vyH = null;
-    if (S.hunt && dh < 3.0) { // slowly turn toward the nearest krill and creep after it
+    if (S.hunt && (dh < 3.0 || S.huntFree)) { if (S.huntFree) SW.home = [cx, cz]; // slowly turn toward the nearest krill and creep after it
       const mf = mouthFrame(), ex = S.hunt[0] - mf.f[0], ez = S.hunt[2] - mf.f[2], el = Math.hypot(ex, ez) + 1e-6;
       wT = Math.max(-0.8, Math.min(0.8, 1.5 * Math.atan2(fz * ex - fx * ez, fx * ex + fz * ez)));
-      cr_ = S.cruise * (el < 0.9 ? 0.55 : 0.75); vyH = Math.max(-0.35, Math.min(0.35, (S.hunt[1] - mf.f[1]) * 0.9));
+      cr_ = S.cruise * (el < 0.9 ? 0.55 : (S.huntFree && el > 1.4 ? 1.25 : 0.8)); vyH = Math.max(-0.35, Math.min(0.35, (S.hunt[1] - mf.f[1]) * 0.9));
     } else if (dh > 1.3) { const cr = fx * dz - fz * dx; wT += Math.max(-1, Math.min(1, -cr / dh)) * Math.min(1.2, (dh - 1.3)); }
     SW.om += (wT - SW.om) * Math.min(1, 1.5 * dt);
     SW.ei = Math.max(-0.5, Math.min(0.5, (SW.ei || 0) + (S.swimH - cy) * dt * 0.8));
@@ -1556,6 +1567,32 @@ const WAYS = [
 
 // ---------------------------------------------------------------- state
 let huntCool = 0;
+// "follow my food": one big krill the shark chases; grab it and lead the shark around, it respawns when eaten
+const LURE_K = 7, lure = { p: [2, 0.8, 0.5], v: [0, 0, 0], grab: false, t: 0, s: 0, id: 0 }, LI = new Float32Array(12);
+function lureSpawn() {
+  const c = bodyCentre(); let x = 1.5, z = 1.5;
+  for (let i = 0; i < 24; i++) { const a = Math.random() * 6.283, r = 0.7 + Math.random() * 1.4; x = 1.5 + Math.cos(a) * r; z = Math.sin(a) * r; if (Math.hypot(x - c[0], z - c[2]) > 1.5) break; }
+  lure.p = [x, Math.max(0.55, ST.swim ? world.S.swimH : c[1]) + (Math.random() - 0.5) * 0.3, z]; lure.v = [0, 0, 0]; lure.s = 0; lure.grab = false; lure.id++;
+}
+function lureSet(x, y, z) { // user drag target, kept inside the dish
+  const rx = x - 1.5, rr = Math.hypot(rx, z); if (rr > 2.2) { x = 1.5 + rx / rr * 2.2; z = z / rr * 2.2; }
+  lure.p = [x, Math.max(0.15, Math.min(2.2, y)), z]; lure.v = [0, 0, 0];
+}
+function lureStep(dt) {
+  const S = world.S;
+  if (!ST.lure) { S.huntFree = false; return; }
+  lure.s += (1 - lure.s) * Math.min(1, dt * 2); lure.t += dt;
+  if (!lure.grab) { // floats on its own: slow bob and drift, settles to the shark's depth
+    const lv = Math.max(0.5, S.swimH), v = lure.v;
+    v[0] += Math.sin(lure.t * 0.7) * 0.12 * dt; v[2] += Math.cos(lure.t * 0.6) * 0.12 * dt; v[1] += ((lv - lure.p[1]) * 0.6 + Math.sin(lure.t * 1.1) * 0.1) * dt;
+    const dm = Math.exp(-1.6 * dt); v[0] *= dm; v[1] *= dm; v[2] *= dm;
+    lureSet(lure.p[0] + v[0] * dt, lure.p[1] + v[1] * dt, lure.p[2] + v[2] * dt); lure.v = v;
+  }
+  const mf = world.mouthFrame(), dx = lure.p[0] - mf.f[0], dy = lure.p[1] - mf.f[1], dz = lure.p[2] - mf.f[2], d = Math.hypot(dx, dy, dz);
+  S.hunt = [lure.p[0], lure.p[1], lure.p[2]]; S.huntFree = true;
+  huntCool -= dt; if (ST.gulpT < 0 && d < 0.8 && huntCool <= 0) { ST.gulpT = 0; huntCool = 1.1; }
+  if (d < 0.22 && lure.s > 0.8) { lureSpawn(); }
+}
 function bodyCentre() { const p = world.pos, n = world.nv; let x = 0, y = 0, z = 0; for (let i = 0; i < n; i++) { x += p[3 * i]; y += p[3 * i + 1]; z += p[3 * i + 2]; } return [x / n, y / n, z / n]; }
 const ST = { way: 0, lu: 0, luT: 0, eyeExt: 1, eyeT: 1, swishT: 0, ocean: false, swim: false, kelp: true, gulpT: -1, mesh: false, slow: false, pause: false, twist: false, firm: 0.55, damp: 0.35, nsub: 4, cell: 0.05 };
 const cam = { yaw: -0.95, pitch: 0.62, dist: 4.7, tx: 1.35, ty: 0.12, tz: 0 };
@@ -1617,7 +1654,7 @@ function initPipelines() {
   buf.sphV = device.createBuffer({ size: sp.length * 4, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST }); device.queue.writeBuffer(buf.sphV, 0, new Float32Array(sp));
   buf.sphI = device.createBuffer({ size: si.length * 4, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST }); device.queue.writeBuffer(buf.sphI, 0, new Uint32Array(si));
   buf.sphN = si.length;
-  buf.inst = device.createBuffer({ size: (KMAX + 2 + 64 + KELP_INST) * 48, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+  buf.inst = device.createBuffer({ size: (KMAX + 3 + 64 + KELP_INST) * 48, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
 }
 
 function makeVR(w, h) {
@@ -1687,7 +1724,7 @@ function advance(dtReal) {
   // ocean / swim: krill float at the shark's depth; a swimming shark hunts the nearest one and gulps when it is at the mouth
   krill.gs += ((ST.ocean ? 0.02 : 1) - krill.gs) * Math.min(1, dt * 3); krill.dr = ST.ocean ? 1.1 : 0;
   if (ST.ocean) { const lv = ST.swim ? S.swimH : bodyCentre()[1]; krill.level += (lv - krill.level) * Math.min(1, dt * 0.8); }
-  S.hunt = null;
+  S.hunt = null; S.huntFree = false;
   if (ST.swim && krill.n) {
     const mf = world.mouthFrame(), nr = krill.nearest(mf.f[0], mf.f[1], mf.f[2], 3.2);
     if (nr) {
@@ -1696,6 +1733,7 @@ function advance(dtReal) {
       huntCool -= dt; if (ST.gulpT < 0 && nr.d < 0.95 && out > 0.02 && huntCool <= 0) { ST.gulpT = 0; huntCool = 1.0; }
     }
   }
+  lureStep(dt);
   world.step(dt);
   krill.step(dt, steer);
   if (ST.kelp) kelp.step(dt);
@@ -1732,6 +1770,11 @@ function updateInstances() {
   }
   device.queue.writeBuffer(buf.inst, 0, I, 0, (n + 2) * 12);
   let tot = n + 2;
+  if (ST.lure && lure.s > 0.01) {
+    const a = lure.t * 0.5, sc = lure.s * LURE_K; LI[0] = lure.p[0]; LI[1] = lure.p[1] + Math.sin(lure.t * 1.1) * 0.01; LI[2] = lure.p[2]; LI[3] = 0;
+    LI[4] = 0; LI[5] = Math.sin(a / 2); LI[6] = 0; LI[7] = Math.cos(a / 2); LI[8] = (K_HALF + K_R) * sc; LI[9] = K_R * sc; LI[10] = K_R * sc; LI[11] = 0.8;
+    device.queue.writeBuffer(buf.inst, tot * 48, LI, 0, 12); tot += 1;
+  }
   if (xrS && xiN) { device.queue.writeBuffer(buf.inst, tot * 48, XI, 0, xiN * 12); tot += xiN; }
   if (ST.kelp) { const kn = kelp.fill(); device.queue.writeBuffer(buf.inst, tot * 48, kelp.inst, 0, kn * 12); tot += kn; }
   return tot;
@@ -1831,22 +1874,23 @@ const A = {
   swish() { ST.swishT = ST.swishT ? 0 : 1; sync(); },
   ocean() { ST.ocean = !ST.ocean; if (ST.ocean) for (let i = 0; i < world.nv; i++) world.vel[3 * i + 1] += 0.45; else ST.swim = false; sync(); },
   swim() { ST.swim = !ST.swim; if (ST.swim && !ST.ocean) { ST.ocean = true; for (let i = 0; i < world.nv; i++) world.vel[3 * i + 1] += 0.45; } sync(); },
+  lure() { ST.lure = !ST.lure; if (ST.lure) { if (!ST.ocean) { ST.ocean = true; for (let i = 0; i < world.nv; i++) world.vel[3 * i + 1] += 0.45; } ST.swim = true; lureSpawn(); } else lure.grab = false; sync(); },
   eyes() { ST.eyeT = ST.eyeT ? 0 : 1; sync(); },
   light() { ST.luT = ST.luT ? 0 : 1; sync(); },
   krill() { if (ST.ocean) { const c = bodyCentre(); krill.spawn(110, c); } else krill.spawn(110); },
-  reset() { world.reset(); krill.clear(); ST.gulpT = -1; ST.swishT = 0; ST.ocean = false; ST.swim = false; ST.eyeT = 1; ST.luT = 0; uploadDynamic(); sync(); },
+  reset() { world.reset(); krill.clear(); ST.gulpT = -1; ST.swishT = 0; ST.ocean = false; ST.swim = false; ST.lure = false; lure.grab = false; ST.eyeT = 1; ST.luT = 0; uploadDynamic(); sync(); },
   way(i) { ST.way = i; sync(); },
 };
 function sync() {
   $('bSwish').setAttribute('aria-pressed', !!ST.swishT); $('bEyes').setAttribute('aria-pressed', !ST.eyeT); $('bEyes').textContent = ST.eyeT ? 'Tuck the eyes' : 'Release the eyes';
-  $('bLight').setAttribute('aria-pressed', !!ST.luT); $('bOcean').setAttribute('aria-pressed', !!ST.ocean); $('bSwim').setAttribute('aria-pressed', !!ST.swim);
+  $('bLight').setAttribute('aria-pressed', !!ST.luT); $('bOcean').setAttribute('aria-pressed', !!ST.ocean); $('bSwim').setAttribute('aria-pressed', !!ST.swim); $('bLure').setAttribute('aria-pressed', !!ST.lure);
   document.querySelectorAll('.way').forEach((b, i) => b.setAttribute('aria-pressed', i === ST.way));
   if (xrS) xrS.dirty = true;
 }
 function initUI() {
   const ways = $('ways');
   WAYS.forEach((w, i) => { const b = document.createElement('button'); b.className = 'way'; b.innerHTML = `<i style="background:${w.sw}"></i>${w.name}`; b.onclick = () => A.way(i); ways.appendChild(b); });
-  $('bGulp').onclick = A.gulp; $('bSwish').onclick = A.swish; $('bOcean').onclick = A.ocean; $('bSwim').onclick = A.swim; $('bEyes').onclick = A.eyes; $('bLight').onclick = A.light; $('bKrill').onclick = A.krill; $('bReset').onclick = A.reset;
+  $('bGulp').onclick = A.gulp; $('bSwish').onclick = A.swish; $('bOcean').onclick = A.ocean; $('bSwim').onclick = A.swim; $('bLure').onclick = A.lure; $('bEyes').onclick = A.eyes; $('bLight').onclick = A.light; $('bKrill').onclick = A.krill; $('bReset').onclick = A.reset;
   $('sFirm').oninput = e => { ST.firm = e.target.value / 100; $('oFirm').textContent = e.target.value; if (xrS) xrS.dirty = true; };
   $('sDamp').oninput = e => { ST.damp = e.target.value / 100; $('oDamp').textContent = e.target.value; if (xrS) xrS.dirty = true; };
   $('cSlow').onchange = e => { ST.slow = e.target.checked; if (xrS) xrS.dirty = true; };
@@ -1867,6 +1911,10 @@ function bindPointer() {
     if (ptrs.size === 2) { drag = null; world.endGrab(); canvas.classList.remove('grabbing'); const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); return; }
     if (ptrs.size > 2) return;
     const r = pickRay(e.clientX, e.clientY), v = world.pickVertex(r.ro, r.rd);
+    if (ST.lure && lure.s > 0.3) {
+      const vx = lure.p[0] - r.ro[0], vy = lure.p[1] - r.ro[1], vz = lure.p[2] - r.ro[2], tt = vx * r.rd[0] + vy * r.rd[1] + vz * r.rd[2];
+      if (tt > 0 && Math.hypot(vx - r.rd[0] * tt, vy - r.rd[1] * tt, vz - r.rd[2] * tt) < 0.2) { lure.grab = true; drag = { mode: 'lure', t: vx * r.fwd[0] + vy * r.fwd[1] + vz * r.fwd[2] }; canvas.classList.add('grabbing'); return; }
+    }
     const kc = (v < 0 && ST.kelp) ? kelp.pick(r.ro, r.rd, 0.14) : -1;
     if (kc >= 0) { drag = { mode: 'kelp', c: kc, x: e.clientX, y: e.clientY }; canvas.classList.add('grabbing'); return; }
     if (v >= 0) {
@@ -1881,6 +1929,7 @@ function bindPointer() {
     const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
     if (ptrs.size === 2) { const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y); if (pinch0 > 0) cam.dist = clamp(cam.dist * pinch0 / d, 1.6, 9); pinch0 = d; return; }
     if (!drag) return;
+    if (drag.mode === 'lure') { const r = pickRay(e.clientX, e.clientY), den = Math.max(0.2, r.rd[0] * r.fwd[0] + r.rd[1] * r.fwd[1] + r.rd[2] * r.fwd[2]), tt = drag.t / den; lureSet(r.ro[0] + r.rd[0] * tt, r.ro[1] + r.rd[1] * tt, r.ro[2] + r.rd[2] * tt); return; }
     if (drag.mode === 'kelp') { const r = pickRay(e.clientX, e.clientY); if (r.rd[1] < -0.02) { const t = -r.ro[1] / r.rd[1]; kelp.move(drag.c, r.ro[0] + r.rd[0] * t, r.ro[2] + r.rd[2] * t); } return; }
     if (drag.mode === 'orbit') { cam.yaw -= dx * 0.006; cam.pitch = clamp(cam.pitch + dy * 0.006, 0.06, 1.45); return; }
     const r = pickRay(e.clientX, e.clientY);
@@ -1892,7 +1941,7 @@ function bindPointer() {
     tg[1] = Math.max(0.02, tg[1]);
     world.moveGrab(tg, drag.twist);
   });
-  const up = e => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch0 = 0; if (drag && drag.mode === 'grab') world.endGrab(); drag = null; canvas.classList.remove('grabbing'); };
+  const up = e => { if (drag && drag.mode === 'lure') lure.grab = false; ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch0 = 0; if (drag && drag.mode === 'grab') world.endGrab(); drag = null; canvas.classList.remove('grabbing'); };
   canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
   canvas.addEventListener('wheel', e => { e.preventDefault(); cam.dist = clamp(cam.dist * Math.exp(e.deltaY * 0.0012), 1.6, 9); }, { passive: false });
 }
@@ -1914,6 +1963,7 @@ const VR_ITEMS = (() => {
   add('stepper', 'Firmness', 28, 584, 70, { y: 526, get: () => ST.firm, set: v => { ST.firm = v; $('sFirm').value = v * 100; $('oFirm').textContent = Math.round(v * 100); } });
   add('stepper', 'Damping', 28, 584, 70, { y: 606, get: () => ST.damp, set: v => { ST.damp = v; $('sDamp').value = v * 100; $('oDamp').textContent = Math.round(v * 100); } });
   [['¼ speed', 'slow', 'cSlow'], ['Show mesh', 'mesh', 'cMesh'], ['Pause', 'pause', 'cPause']].forEach((t, i) => add('btn', t[0], 28 + i * 200, 190, 66, { y: 696, on: () => ST[t[1]], fn: () => { ST[t[1]] = !ST[t[1]]; $(t[2]).checked = ST[t[1]]; } }));
+  add('btn', 'Follow my food', 328, 284, 66, { y: 772, on: () => ST.lure, fn: A.lure });
   add('btn', 'Seaweed', 28, 284, 66, { y: 772, on: () => ST.kelp, fn: () => { ST.kelp = !ST.kelp; $('cKelp').checked = ST.kelp; } });
   it.push(sizeItem(872), turnItem(952));
   add('btn', 'Move shark', 28, 284, 74, { y: 1052, only: 'ar', fn: () => setMode('place') });
@@ -1926,9 +1976,9 @@ function setMode(m) {
   s.hover = -1; s.dirty = true;
 }
 function drawPanel(hover) {
-  const s = xrS, c = panelRes.cv, g2 = c.getContext('2d'), w = WAYS[ST.way], dk = ST.lu > 0.5, place = s.mode === 'place', Hc = place ? 600 : PNH;
+  const s = xrS, c = panelRes.cv, g2 = c.getContext('2d'), w = WAYS[ST.way], dk = true, place = s.mode === 'place', Hc = place ? 600 : PNH;
   g2.clearRect(0, 0, PNW, PNH);
-  g2.fillStyle = dk ? 'rgba(18,22,28,0.94)' : 'rgba(244,243,238,0.95)'; g2.beginPath(); g2.roundRect(0, 0, PNW, Hc, 34); g2.fill();
+  { const gr = g2.createLinearGradient(0, 0, PNW * 0.6, Hc); gr.addColorStop(0, 'rgba(34,44,56,0.72)'); gr.addColorStop(1, 'rgba(10,15,22,0.62)'); g2.fillStyle = gr; g2.beginPath(); g2.roundRect(0, 0, PNW, Hc, 34); g2.fill(); g2.strokeStyle = 'rgba(255,255,255,0.22)'; g2.lineWidth = 2; g2.stroke(); }
   const ink = dk ? '#e9eef0' : '#14212b', mute = dk ? '#8fa1ab' : '#5b6b75';
   g2.fillStyle = ink; g2.font = 'italic 46px Georgia, serif'; g2.fillText('Whale Shark Jelly.', 28, 54);
   g2.font = '600 17px system-ui, sans-serif'; g2.fillStyle = mute;
@@ -1958,9 +2008,9 @@ function drawPanel(hover) {
 }
 function wrapText(g2, text, x, y, maxW, lh) { let line = ''; for (const wd of text.split(' ')) { const t = line ? line + ' ' + wd : wd; if (g2.measureText(t).width > maxW && line) { g2.fillText(line, x, y); y += lh; line = wd; } else line = t; } g2.fillText(line, x, y); return y; }
 function drawInfo() { // second floating board: the readouts and notes from the page's top and bottom bars
-  const s = xrS, g2 = panelRes.cvI.getContext('2d'), w = WAYS[ST.way], dk = ST.lu > 0.5;
+  const s = xrS, g2 = panelRes.cvI.getContext('2d'), w = WAYS[ST.way], dk = true;
   g2.clearRect(0, 0, PIW, PIH);
-  g2.fillStyle = dk ? 'rgba(18,22,28,0.94)' : 'rgba(244,243,238,0.95)'; g2.beginPath(); g2.roundRect(0, 0, PIW, PIH, 34); g2.fill();
+  { const gr = g2.createLinearGradient(0, 0, PIW * 0.6, PIH); gr.addColorStop(0, 'rgba(34,44,56,0.72)'); gr.addColorStop(1, 'rgba(10,15,22,0.62)'); g2.fillStyle = gr; g2.beginPath(); g2.roundRect(0, 0, PIW, PIH, 34); g2.fill(); g2.strokeStyle = 'rgba(255,255,255,0.22)'; g2.lineWidth = 2; g2.stroke(); }
   const ink = dk ? '#e9eef0' : '#14212b', mute = dk ? '#8fa1ab' : '#5b6b75';
   g2.fillStyle = ink; g2.font = 'italic 46px Georgia, serif'; g2.fillText('Whale Shark Jelly.', 30, 58);
   g2.font = '600 17px system-ui, sans-serif'; g2.fillStyle = mute; g2.fillText('MATERIAL STUDIES  ·  SOFT-BODY STUDY', 32, 86);
@@ -2134,7 +2184,7 @@ function xrSelect(ev, down) {
   if (!down) {
     s.pinch.delete(src);
     { const g = s.grabs.get(src); if (g) { world.endGrab(g.id); s.grabs.delete(src); } }
-    if (s.kgrabs) s.kgrabs.delete(src);
+    if (s.kgrabs) { const kg = s.kgrabs.get(src); if (kg && kg.lure) lure.grab = false; s.kgrabs.delete(src); }
     if (s.pgrab && s.pgrab.src === src) s.pgrab = null;
     return;
   }
@@ -2153,6 +2203,11 @@ function xrSelect(ev, down) {
   if (!XR_MI) XR_MI = M4.inv(XR_M);
   const ro = M4.pt(XR_MI, ray.ro), rd = nrm(M4.dir(XR_MI, ray.rd));
   if (!s.kgrabs) s.kgrabs = new Map();
+  if (ST.lure && lure.s > 0.3) { // grab the big krill: pinch close to it, or point the ray at it
+    const pk = pinchPoint(frame, src);
+    if (pk) { const ps = M4.pt(XR_MI, pk); if (Math.hypot(ps[0] - lure.p[0], ps[1] - lure.p[1], ps[2] - lure.p[2]) < 0.3) { lure.grab = true; s.kgrabs.set(src, { lure: true, direct: true, off: [lure.p[0] - ps[0], lure.p[1] - ps[1], lure.p[2] - ps[2]], id: lure.id }); return; } }
+    else { const vx = lure.p[0] - ro[0], vy = lure.p[1] - ro[1], vz = lure.p[2] - ro[2], tt = vx * rd[0] + vy * rd[1] + vz * rd[2]; if (tt > 0 && Math.hypot(vx - rd[0] * tt, vy - rd[1] * tt, vz - rd[2] * tt) < 0.18) { lure.grab = true; s.kgrabs.set(src, { lure: true, dist: tt, id: lure.id }); return; } }
+  }
   if (ST.kelp) { // pinch a seaweed clump and slide it over the floor
     const pk = pinchPoint(frame, src);
     if (pk) { const ps = M4.pt(XR_MI, pk), kc = kelp.pick(null, null, 0.2, ps); if (kc >= 0) { const r0 = kelp.root(kc); s.kgrabs.set(src, { c: kc, direct: true, off: [r0[0] - ps[0], r0[1] - ps[2]] }); return; } }
@@ -2244,7 +2299,12 @@ function xrFrameInner(t, frame, s) {
     if (hit) { len = hit.t; onPanel.add(src); const i = itemAt(hit.px, hit.py); if (i >= 0) { hover = i; ptrHoverSide = hit.px < s.items[i].x + 300 ? 0 : 1; } }
     if (s.pgrab && s.pgrab.src === src) { const d = s.pgrab.dist; faceEye(s, [ray.ro[0] + ray.rd[0] * d, ray.ro[1] + ray.rd[1] * d, ray.ro[2] + ray.rd[2] * d], eye); }
     const kg = s.kgrabs && s.kgrabs.get(src);
-    if (kg) {
+    if (kg && kg.lure) {
+      if (!XR_MI) XR_MI = M4.inv(XR_M);
+      if (kg.id !== lure.id) s.kgrabs.delete(src); // it was eaten
+      else if (kg.direct) { const pk = pinchPoint(frame, src); if (pk) { const ps = M4.pt(XR_MI, pk); lureSet(ps[0] + kg.off[0], ps[1] + kg.off[1], ps[2] + kg.off[2]); } }
+      else { const ro = M4.pt(XR_MI, ray.ro), rd = nrm(M4.dir(XR_MI, ray.rd)); lureSet(ro[0] + rd[0] * kg.dist, ro[1] + rd[1] * kg.dist, ro[2] + rd[2] * kg.dist); }
+    } else if (kg) {
       if (!XR_MI) XR_MI = M4.inv(XR_M);
       if (kg.direct) { const pk = pinchPoint(frame, src); if (pk) { const ps = M4.pt(XR_MI, pk); kelp.move(kg.c, ps[0] + kg.off[0], ps[2] + kg.off[1]); } }
       else { const ro = M4.pt(XR_MI, ray.ro), rd = nrm(M4.dir(XR_MI, ray.rd)); if (rd[1] < -0.02) { const t = -ro[1] / rd[1]; kelp.move(kg.c, ro[0] + rd[0] * t, ro[2] + rd[2] * t); } }
