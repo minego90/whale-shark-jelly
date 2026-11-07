@@ -74,7 +74,33 @@ select{font:500 12px var(--sans);background:transparent;color:var(--ink);border:
 details.notes{border-radius:14px}
 body.dark .panel{background:linear-gradient(160deg,rgba(26,34,44,.62),rgba(10,15,22,.52))}
 .panel button,.panel select,.panel input{color-scheme:dark}
-@media (max-width:820px){.panel{left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:46svh;border-radius:18px}.stage{height:100svh}}
+@media (max-width:820px){#bCam{left:auto;right:12px;transform:none;padding:9px 14px;font-size:13px}body.camhash #bCam{left:50%;right:auto;transform:translate(-50%,-50%)}.panel{left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:46svh;border-radius:18px}.stage{height:100svh}}
+
+/* phone camera mode */
+#bCam{position:fixed;left:50%;transform:translateX(-50%);top:14px;z-index:6;font:600 15px var(--sans);padding:11px 20px;border-radius:999px;border:1px solid rgba(255,255,255,.28);color:#fff;background:linear-gradient(160deg,rgba(40,120,180,.78),rgba(20,60,100,.7));-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:0 8px 28px rgba(0,0,0,.3)}
+body.camhash #bCam{top:50%;transform:translate(-50%,-50%);font-size:19px;padding:18px 30px}
+body.ph #bCam,body.ph .panel,body.ph .mast,body.ph .foot,body.ph .hint{display:none!important}
+body.ph{background:#000!important;overflow:hidden}
+#phVid{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;display:none;background:#000}
+body.ph #phVid{display:block}
+body.ph .stage,body.ph canvas{background:transparent!important}
+body.ph .page,body.ph .stage{position:fixed;inset:0;z-index:1;height:100%!important;min-height:0}
+#ph{display:none;position:fixed;inset:0;z-index:7;pointer-events:none;font-family:var(--sans);color:#eef3f5}
+body.ph #ph{display:block}
+#phHint{position:absolute;left:50%;top:calc(18px + env(safe-area-inset-top));transform:translateX(-50%);max-width:86%;text-align:center;padding:9px 16px;border-radius:14px;font-size:14px;line-height:1.35;background:rgba(10,15,22,.55);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.16)}
+#phRet{position:absolute;left:50%;top:50%;width:64px;height:64px;margin:-32px 0 0 -32px;border:2px solid rgba(255,255,255,.85);border-radius:50%;display:none;box-shadow:0 0 0 1px rgba(0,0,0,.25)}
+#phRet::after{content:"";position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:#fff}
+#phSheet{position:absolute;left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));pointer-events:auto;border-radius:20px;padding:6px 12px 12px;background:linear-gradient(160deg,rgba(28,36,46,.66),rgba(10,15,22,.58));-webkit-backdrop-filter:blur(20px) saturate(1.3);backdrop-filter:blur(20px) saturate(1.3);border:1px solid rgba(255,255,255,.16);box-shadow:0 10px 36px rgba(0,0,0,.35);transition:transform .28s ease;max-height:52svh;overflow:hidden}
+#phSheet.closed{transform:translateY(calc(100% - 38px - env(safe-area-inset-bottom)))}
+#phHandle{display:flex;align-items:center;justify-content:center;height:30px;cursor:pointer;font:600 11px var(--sans);letter-spacing:.2em;text-transform:uppercase;color:#a9bac4}
+#phHandle::before{content:"";width:38px;height:4px;border-radius:2px;background:rgba(255,255,255,.4);margin-right:10px}
+#phBody{overflow:auto;max-height:calc(52svh - 48px);-webkit-overflow-scrolling:touch}
+#phGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+#phGrid button{font:600 13px var(--sans);padding:11px 6px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.07);color:#eef3f5}
+#phGrid button[aria-pressed=true]{background:rgba(60,150,210,.55);border-color:rgba(140,200,240,.7)}
+#phSl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin-top:10px;font-size:12px;align-items:center;color:#c4d0d7}
+#phSl input{width:100%}
+#phSt{margin-top:8px;font-size:11px;color:#8fa1ab}
 </style>
 </head>
 <body>
@@ -142,8 +168,24 @@ body.dark .panel{background:linear-gradient(160deg,rgba(26,34,44,.62),rgba(10,15
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v13 - 11-07_22:53Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v14 - 11-07_23:42Z</p>
  </aside>
+</div>
+
+<video id="phVid" playsinline muted autoplay></video>
+<button id="bCam">Camera AR</button>
+<div id="ph">
+ <div id="phHint"></div><div id="phRet"></div>
+ <div id="phSheet"><div id="phHandle">Menu</div><div id="phBody">
+  <div id="phGrid">
+   <button id="pGulp">Gulp</button><button id="pSwish" aria-pressed="false">Swish tail</button><button id="pOcean" aria-pressed="false">Ocean gravity</button>
+   <button id="pSwim" aria-pressed="false">Swim</button><button id="pLure" aria-pressed="false">Follow my food</button><button id="pKrill">Scatter krill</button>
+   <button id="pKelp" aria-pressed="true">Seaweed</button><button id="pLight" aria-pressed="false">Light up</button><button id="pHands" aria-pressed="true">Hands</button>
+   <button id="pMove">Move shark</button><button id="pReset">Reset</button><button id="pExit">Exit</button>
+  </div>
+  <div id="phSl"><span>Size</span><input type="range" id="pSize" min="0" max="100" value="45"><span>Phone height</span><input type="range" id="pFloor" min="0" max="100" value="38"><span>Firmness</span><input type="range" id="pFirm" min="0" max="100" value="55"></div>
+  <div id="phSt"></div>
+ </div></div>
 </div>
 <script type="module">
 //#region CORE
@@ -1527,6 +1569,7 @@ struct PO { @builtin(position) clip: vec4<f32>, @location(0) uv: vec2<f32> };
 const $ = id => document.getElementById(id);
 const canvas = $('c'), stage = $('stage');
 const clamp = (x, a, b) => Math.min(Math.max(x, a), b);
+const PHN = { on: false }; // phone camera mode (parts/phone.js)
 
 // ---------------------------------------------------------------- math (column-major)
 const M4 = {
@@ -1751,7 +1794,7 @@ function writeG(vr, viewProj, camPos, camFwd, off) {
   d.set(viewProj, 0); d.set(M4.inv(viewProj), 16); d.set(lightVP, 32);
   const V = (i, a, b = 0) => { d[48 + i * 4] = a[0]; d[49 + i * 4] = a[1]; d[50 + i * 4] = a[2]; d[51 + i * 4] = b; };
   V(0, camPos, performance.now() / 1000); V(1, camFwd, u); V(2, LIGHT, world.S.flare); V(3, [vr.w, vr.h, 1 / vr.w, 1 / vr.h]);
-  V(4, w.absorb.map(x => x * 1.35), 1.0); V(5, w.tint, 0); V(6, w.pig, 0.97); V(7, w.pale, 0); V(8, w.milk, xrS && xrS.ar ? 1 : 0);
+  V(4, w.absorb.map(x => x * 1.35), 1.0); V(5, w.tint, 0); V(6, w.pig, 0.97); V(7, w.pale, 0); V(8, w.milk, (xrS && xrS.ar) || PHN.on ? 1 : 0);
   V(9, bg, 1.0);
   V(10, bg.map(x => Math.min(1, u > 0.5 ? x * 1.8 + 0.01 : x * 0.5 + 0.5)), 10);
   V(11, w.glow, 0); V(12, [ST.mesh ? 1 : 0, world.YM, world.MOUTH.r[1]], 10);
@@ -1775,7 +1818,7 @@ function updateInstances() {
     LI[4] = 0; LI[5] = Math.sin(a / 2); LI[6] = 0; LI[7] = Math.cos(a / 2); LI[8] = (K_HALF + K_R) * sc; LI[9] = K_R * sc; LI[10] = K_R * sc; LI[11] = 0.8;
     device.queue.writeBuffer(buf.inst, tot * 48, LI, 0, 12); tot += 1;
   }
-  if (xrS && xiN) { device.queue.writeBuffer(buf.inst, tot * 48, XI, 0, xiN * 12); tot += xiN; }
+  if ((xrS || PHN.on) && xiN) { device.queue.writeBuffer(buf.inst, tot * 48, XI, 0, xiN * 12); tot += xiN; }
   if (ST.kelp) { const kn = kelp.fill(); device.queue.writeBuffer(buf.inst, tot * 48, kelp.inst, 0, kn * 12); tot += kn; }
   return tot;
 }
@@ -1792,7 +1835,7 @@ function encodeShadows(enc, vr) {
 }
 function encodeView(enc, vr, colorView, nInst, viewport) {
   const bg = lin(bgNow());
-  let p = enc.beginRenderPass({ colorAttachments: [{ view: vr.sceneV, clearValue: { r: bg[0], g: bg[1], b: bg[2], a: (xrS && xrS.ar) ? 0 : 1 }, loadOp: 'clear', storeOp: 'store' }], depthStencilAttachment: { view: vr.sceneDV, depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' } });
+  let p = enc.beginRenderPass({ colorAttachments: [{ view: vr.sceneV, clearValue: { r: bg[0], g: bg[1], b: bg[2], a: ((xrS && xrS.ar) || PHN.on) ? 0 : 1 }, loadOp: 'clear', storeOp: 'store' }], depthStencilAttachment: { view: vr.sceneDV, depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' } });
   p.setBindGroup(0, vr.bgScene);
   if (!DBG.has('nofloor')) { p.setPipeline(pipes.floor); p.draw(3); }
   if (!DBG.has('noblob')) { p.setPipeline(pipes.blob); p.setVertexBuffer(0, buf.pos); p.setVertexBuffer(1, buf.bnrm); p.setIndexBuffer(buf.blob, 'uint32'); p.drawIndexed(buf.nBlob); }
@@ -1844,11 +1887,12 @@ function frame(now) {
   requestAnimationFrame(frame);
   if (document.hidden) { lastT = now; return; }
   const dtReal = Math.min(0.05, (now - lastT) / 1000 || 0.016); lastT = now; frameN++;
+  if (PHN.on) phoneUpdate(now);
   advance(dtReal); applyTheme();
   if (!ST.pause || frameN < 3) uploadDynamic();
   if (DBG.has('norender')) return;
   if (DBG.has('clearonly')) { const e = device.createCommandEncoder(), q = e.beginRenderPass({ colorAttachments: [{ view: ctx.getCurrentTexture().createView(), clearValue: { r: 0.2, g: 0.5, b: 0.3, a: 1 }, loadOp: 'clear', storeOp: 'store' }] }); q.end(); device.queue.submit([e.finish()]); return; }
-  const nInst = updateInstances(), b = camBasis();
+  const nInst = updateInstances(), b = PHN.on ? phoneBasis() : camBasis();
   const vr = vrs[0];
   writeG(vr, b.vp, b.eye, b.fwd);
   const enc = device.createCommandEncoder();
@@ -1860,7 +1904,7 @@ function frame(now) {
 }
 function resize() {
   if (!gpuOK) return;
-  const dpr = Math.min(window.devicePixelRatio || 1, stage.clientWidth < 700 ? 1.75 : 2);
+  const dpr = Math.min(window.devicePixelRatio || 1, PHN.on ? 1.5 : stage.clientWidth < 700 ? 1.75 : 2);
   const w = Math.max(2, Math.floor(stage.clientWidth * dpr)), h = Math.max(2, Math.floor(stage.clientHeight * dpr));
   if (canvas.width === w && canvas.height === h && vrs[0]) return;
   canvas.width = w; canvas.height = h;
@@ -1886,6 +1930,7 @@ function sync() {
   $('bLight').setAttribute('aria-pressed', !!ST.luT); $('bOcean').setAttribute('aria-pressed', !!ST.ocean); $('bSwim').setAttribute('aria-pressed', !!ST.swim); $('bLure').setAttribute('aria-pressed', !!ST.lure);
   document.querySelectorAll('.way').forEach((b, i) => b.setAttribute('aria-pressed', i === ST.way));
   if (xrS) xrS.dirty = true;
+  if (PHN.on) phoneSync();
 }
 function initUI() {
   const ways = $('ways');
@@ -1907,6 +1952,7 @@ const ptrs = new Map(); let drag = null, pinch0 = 0;
 function bindPointer() {
   canvas.addEventListener('contextmenu', e => e.preventDefault());
   canvas.addEventListener('pointerdown', e => {
+    if (PHN.on) return;
     canvas.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (ptrs.size === 2) { drag = null; world.endGrab(); canvas.classList.remove('grabbing'); const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); return; }
     if (ptrs.size > 2) return;
@@ -2386,7 +2432,7 @@ async function snapshot() {
   const w = canvas.width, h = canvas.height, vr = vrs[0];
   const tex = device.createTexture({ size: [w, h], format: fmt, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
   const bpr = Math.ceil(w * 4 / 256) * 256, rb = device.createBuffer({ size: bpr * h, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
-  const b = camBasis(); writeG(vr, b.vp, b.eye, b.fwd);
+  const b = PHN.on ? phoneBasis() : camBasis(); writeG(vr, b.vp, b.eye, b.fwd);
   const enc = device.createCommandEncoder(); encodeShadows(enc, vr);
   const p = encodeView(enc, vr, tex.createView(), updateInstances(), null); p.end();
   enc.copyTextureToBuffer({ texture: tex }, { buffer: rb, bytesPerRow: bpr }, [w, h]);
@@ -2410,7 +2456,7 @@ async function boot() {
     device.lost.then(i => console.warn('GPU device lost', i.reason, i.message, Math.round(performance.now())));
     device.addEventListener && device.addEventListener('uncapturederror', e => { console.error('WebGPU:', e.error.message); xrErrs.push(String(e.error.message).split('\n')[0].slice(0, 110)); if (xrErrs.length > 3) xrErrs.shift(); if (xrS) { xrS.dirty = true; xrS.errAt = frameN; } });
     ctx = canvas.getContext('webgpu'); fmt = navigator.gpu.getPreferredCanvasFormat();
-    ctx.configure({ device, format: fmt, alphaMode: 'opaque' });
+    ctx.configure({ device, format: fmt, alphaMode: 'premultiplied' });
     ST.cell = (window.matchMedia('(max-width:820px)').matches || /Quest|Mobile/i.test(navigator.userAgent)) ? 0.06 : 0.05;
     $('sDetail').value = String(ST.cell);
     initPipelines(); gpuOK = true;
@@ -2423,6 +2469,284 @@ async function boot() {
   } catch (e) { console.error(e); $('nogpu').style.display = 'flex'; $('nogpu').firstElementChild.textContent = 'Could not start WebGPU: ' + e.message; initUI(); }
 }
 boot();
+//#endregion
+//#region PHONE
+// Camera AR for phones: getUserMedia video behind a transparent canvas, device-orientation camera, tap to place on the
+// floor, a retractable bottom menu, and MediaPipe hand tracking turned into the same hand colliders / pinch grabs as WebXR.
+Object.assign(PHN, {
+  mode: 'play', pos: [0, 0, -1.5], yaw: 0, scale: 0.28, floor: 1.0, fy: 1.0, hands: true, Rm: [1, 0, 0, 0, 1, 0, 0, 0, 1],
+  h0: null, ori: null, noSensor: false, lookYaw: 0, lookPitch: -0.35, hl: null, handRes: null, handT: 0, detT: 0, lastVT: -1,
+  hg: new Map(), hprev: new Map(), zs: new Map(), pinchOn: new Map(), H: [], pt: null, stream: null, hintT: 0, fake: null,
+});
+const HAND_MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const MP_VER = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+
+// ---- 3x3 helpers (row-major)
+const m3 = (a, b) => { const o = new Array(9); for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) o[i * 3 + j] = a[i * 3] * b[j] + a[i * 3 + 1] * b[3 + j] + a[i * 3 + 2] * b[6 + j]; return o; };
+const rX = a => { const c = Math.cos(a), s = Math.sin(a); return [1, 0, 0, 0, c, -s, 0, s, c]; };
+const rY = a => { const c = Math.cos(a), s = Math.sin(a); return [c, 0, s, 0, 1, 0, -s, 0, c]; };
+const rZ = a => { const c = Math.cos(a), s = Math.sin(a); return [c, -s, 0, s, c, 0, 0, 0, 1]; };
+const mv3 = (R, v) => [R[0] * v[0] + R[1] * v[1] + R[2] * v[2], R[3] * v[0] + R[4] * v[1] + R[5] * v[2], R[6] * v[0] + R[7] * v[1] + R[8] * v[2]];
+
+function phoneRot() {
+  const o = PHN.ori, D = Math.PI / 180;
+  let R;
+  if (o) {
+    const orient = ((screen.orientation && screen.orientation.angle) || window.orientation || 0) * D;
+    R = m3(m3(m3(m3(rY(o.alpha * D), rX(o.beta * D)), rZ(-o.gamma * D)), rX(-Math.PI / 2)), rZ(-orient));
+    if (PHN.h0 === null) { const fy = -R[5]; if (Math.abs(fy) < 0.85) PHN.h0 = Math.atan2(-R[2], R[8]); } // forward at start = -z
+    if (PHN.h0 !== null) R = m3(rY(PHN.h0), R);
+  } else R = m3(rY(PHN.lookYaw), rX(PHN.lookPitch));
+  PHN.Rm = R; return R;
+}
+function phoneUpdateFov() { const asp = canvas.width / Math.max(1, canvas.height), L = 1.15; PHN.fy = asp < 1 ? L : 2 * Math.atan(Math.tan(L / 2) / asp); }
+function phoneView() {
+  const R = PHN.Rm, e = [0, PHN.floor, 0], V = new Float32Array(16);
+  for (let c = 0; c < 3; c++) for (let r = 0; r < 3; r++) V[c * 4 + r] = R[c * 3 + r];
+  for (let r = 0; r < 3; r++) V[12 + r] = -(R[r] * e[0] + R[3 + r] * e[1] + R[6 + r] * e[2]);
+  V[15] = 1; return V;
+}
+function phoneBasis() {
+  if (!XR_MI) XR_MI = M4.inv(XR_M);
+  phoneUpdateFov();
+  const asp = canvas.width / Math.max(1, canvas.height), P = M4.persp(PHN.fy, asp, 0.04, 40), R = PHN.Rm;
+  return { eye: M4.pt(XR_MI, [0, PHN.floor, 0]), fwd: nrm(M4.dir(XR_MI, [-R[2], -R[5], -R[8]])), vp: M4.mul(M4.mul(P, phoneView()), XR_M) };
+}
+function phoneRay(cx, cy) {
+  const r = canvas.getBoundingClientRect(), nx = (cx - r.left) / r.width * 2 - 1, ny = 1 - (cy - r.top) / r.height * 2, t = Math.tan(PHN.fy / 2);
+  return { ro: [0, PHN.floor, 0], rd: nrm(mv3(PHN.Rm, [nx * t * r.width / r.height, ny * t, -1])) };
+}
+function groundHit(rd) {
+  if (rd[1] < -0.05) { const t = Math.min(3.2, -PHN.floor / rd[1]); return [rd[0] * t, 0, rd[2] * t]; }
+  const l = Math.hypot(rd[0], rd[2]) || 1; return [rd[0] / l * 2, 0, rd[2] / l * 2];
+}
+const simRay = r => { if (!XR_MI) XR_MI = M4.inv(XR_M); return { ro: M4.pt(XR_MI, r.ro), rd: nrm(M4.dir(XR_MI, r.rd)) }; };
+const simFwd = () => { if (!XR_MI) XR_MI = M4.inv(XR_M); const R = PHN.Rm; return nrm(M4.dir(XR_MI, [-R[2], -R[5], -R[8]])); };
+
+// ---- hand landmarks -> world points (metres, camera at (0,floor,0))
+function handWorld(lm, key) {
+  const r = canvas.getBoundingClientRect(), v = $('phVid'), vw = v.videoWidth, vh = v.videoHeight; if (!vw || !vh) return null;
+  const sc = Math.max(r.width / vw, r.height / vh), ox = r.left + (r.width - vw * sc) / 2, oy = r.top + (r.height - vh * sc) / 2;
+  const X = i => ox + lm[i].x * vw * sc, Y = i => oy + lm[i].y * vh * sc, fpx = (r.height / 2) / Math.tan(PHN.fy / 2);
+  const d1 = Math.hypot(X(0) - X(9), Y(0) - Y(9)), d2 = Math.hypot(X(5) - X(17), Y(5) - Y(17));
+  let Z = Math.min(fpx * 0.095 / Math.max(d1, 1), fpx * 0.078 / Math.max(d2, 1)); Z = clamp(Z, 0.15, 1.3);
+  const zp = PHN.zs.get(key); Z = zp ? zp + (Z - zp) * 0.45 : Z; PHN.zs.set(key, Z);
+  const cxs = r.left + r.width / 2, cys = r.top + r.height / 2, pts = [], R = PHN.Rm;
+  for (let i = 0; i < 21; i++) {
+    const Zi = Math.max(0.08, Z * (1 + lm[i].z * vw * sc / fpx)), c = [(X(i) - cxs) / fpx * Zi, -(Y(i) - cys) / fpx * Zi, -Zi], w = mv3(R, c);
+    pts.push([w[0], w[1] + PHN.floor, w[2]]);
+  }
+  const dp = Math.hypot(X(4) - X(8), Y(4) - Y(8)) / Math.max(d1, 1);
+  return { pts, ratio: dp, Z };
+}
+const HMAP = { thumb: [1, 2, 3, 4], index: [5, 6, 7, 8], middle: [9, 10, 11, 12], ring: [13, 14, 15, 16], pinky: [17, 18, 19, 20] };
+function phoneColliders(hands) {
+  let n = 0; const sc = PHN.scale;
+  for (const h of hands) {
+    if (PHN.hg.has(h.key) || !PHN.hands) continue;
+    const P = {}, Rr = {}; P.wrist = h.pts[0];
+    for (const f of Object.keys(HJ)) {
+      const names = HJ[f], idx = HMAP[f];
+      if (names.length === 4) names.forEach((nm, i) => { P[nm] = h.pts[idx[i]]; });
+      else { P[names[0]] = [0, 1, 2].map(k => (h.pts[0][k] + h.pts[idx[0]][k]) / 2); for (let i = 0; i < 4; i++) P[names[i + 1]] = h.pts[idx[i]]; }
+    }
+    for (const k of Object.keys(P)) Rr[k] = 0.011;
+    const pv = PHN.hprev.get(h.key) || new Map(), nx = new Map();
+    const add = (key, p, r) => {
+      if (n >= 160) return; const q = M4.pt(XR_MI, p), o = n * 8, old = pv.get(key) || q;
+      CB[o] = q[0]; CB[o + 1] = q[1]; CB[o + 2] = q[2]; CB[o + 3] = r * 1.15 / sc; CB[o + 4] = old[0]; CB[o + 5] = old[1]; CB[o + 6] = old[2]; n++; nx.set(key, q);
+    };
+    const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+    add('wrist', P.wrist, 0.03);
+    for (const f of Object.keys(HJ)) {
+      const ch = HJ[f];
+      for (let i = 0; i < ch.length; i++) {
+        const a = P[ch[i]]; if (!a) continue;
+        if (i > 0 && P[ch[i - 1]]) add(f + 'm' + i, mid(P[ch[i - 1]], a), 0.011);
+        add(f + i, a, i === 0 ? 0.014 : Rr[ch[i]]);
+      }
+    }
+    const base = ['index', 'middle', 'ring', 'pinky'].map(f => P[HJ[f][0]]), k1 = ['index', 'middle', 'ring', 'pinky'].map(f => P[HJ[f][1]]);
+    const c = [0, 1, 2].map(k => (P.wrist[k] + base[0][k] + base[1][k] + base[2][k] + base[3][k]) / 5);
+    add('palm', c, 0.035);
+    for (let i = 0; i < 4; i++) add('pw' + i, mid(P.wrist, base[i]), 0.026);
+    for (let i = 0; i < 3; i++) { add('kn' + i, mid(k1[i], k1[i + 1]), 0.014); add('bb' + i, mid(base[i], base[i + 1]), 0.02); }
+    for (let i = 0; i < 4; i++) add('pm' + i, mid(base[i], k1[i]), 0.016);
+    PHN.hprev.set(h.key, nx);
+  }
+  world.setColliders(CB, n);
+}
+
+// ---- pinch grabs
+function phonePinchStart(h, ps) {
+  const rd = simFwd();
+  if (ST.lure && lure.s > 0.3 && Math.hypot(ps[0] - lure.p[0], ps[1] - lure.p[1], ps[2] - lure.p[2]) < 0.3) { lure.grab = true; PHN.hg.set(h.key, { type: 'lure', off: [lure.p[0] - ps[0], lure.p[1] - ps[1], lure.p[2] - ps[2]], id: lure.id }); return; }
+  let best = -1, bd = 0.6;
+  for (const v of world.surfV) { const d = Math.hypot(world.pos[3 * v] - ps[0], world.pos[3 * v + 1] - ps[1], world.pos[3 * v + 2] - ps[2]); if (d < bd) { bd = d; best = v; } }
+  if (best >= 0) { const id = PHN.hg.size ? 2 : 1, c = world.beginGrab(best, rd, id).c0; PHN.hg.set(h.key, { type: 'shark', id, off: [c[0] - ps[0], c[1] - ps[1], c[2] - ps[2]] }); return; }
+  if (ST.kelp) { const kc = kelp.pick(null, null, 0.2, ps); if (kc >= 0) { const r0 = kelp.root(kc); PHN.hg.set(h.key, { type: 'kelp', c: kc, off: [r0[0] - ps[0], r0[1] - ps[2]] }); } }
+}
+function phonePinchEnd(key) {
+  const g = PHN.hg.get(key); if (!g) return;
+  if (g.type === 'shark') world.endGrab(g.id); else if (g.type === 'lure') lure.grab = false;
+  PHN.hg.delete(key);
+}
+function phoneGrabMove(h, ps) {
+  const g = PHN.hg.get(h.key); if (!g) return;
+  if (g.type === 'shark') {
+    const gr = world.S.grabs.get(g.id); if (!gr) { PHN.hg.delete(h.key); return; }
+    const tg = [ps[0] + g.off[0], Math.max(0.03, ps[1] + g.off[1]), ps[2] + g.off[2]], c0 = gr.c0, o = [tg[0] - c0[0], tg[1] - c0[1], tg[2] - c0[2]], l = Math.hypot(...o), k = l > 1.4 ? 1.4 / l : 1;
+    world.moveGrab([c0[0] + o[0] * k, c0[1] + o[1] * k, c0[2] + o[2] * k], 0, g.id);
+  } else if (g.type === 'lure') { if (g.id !== lure.id) PHN.hg.delete(h.key); else lureSet(ps[0] + g.off[0], ps[1] + g.off[1], ps[2] + g.off[2]); }
+  else if (g.type === 'kelp') kelp.move(g.c, ps[0] + g.off[0], ps[2] + g.off[1]);
+}
+
+// ---- per-frame update (called from frame() before the sim advances)
+function phoneUpdate(now) {
+  phoneRot(); phoneUpdateFov();
+  if (!XR_MI) XR_MI = M4.inv(XR_M);
+  if (PHN.mode === 'place') {
+    const r = canvas.getBoundingClientRect(), ray = phoneRay(r.left + r.width / 2, r.top + r.height / 2), gp = groundHit(ray.rd);
+    for (let i = 0; i < 3; i++) PHN.pos[i] += (gp[i] - PHN.pos[i]) * (PHN.placed ? 0.3 : 1);
+    PHN.placed = true; PHN.yaw = faceYaw([0, PHN.floor, 0], PHN.pos); applyPlace({ pos: PHN.pos, yaw: PHN.yaw, scale: PHN.scale });
+  }
+  if (!XR_MI) XR_MI = M4.inv(XR_M);
+  // hand tracking
+  let res = PHN.fake;
+  if (!res && PHN.hl && PHN.hands) {
+    const v = $('phVid');
+    if (v.readyState >= 2 && v.currentTime !== PHN.lastVT && now - PHN.detT > 45) { PHN.detT = now; PHN.lastVT = v.currentTime; try { PHN.handRes = PHN.hl.detectForVideo(v, now); PHN.handT = now; } catch (e) { } }
+    res = now - PHN.handT < 300 ? PHN.handRes : null;
+  }
+  const hands = [];
+  if (res && res.landmarks && PHN.hands && PHN.mode === 'play') res.landmarks.forEach((lm, i) => {
+    const hd = res.handedness && res.handedness[i] && res.handedness[i][0], key = (hd && (hd.categoryName || hd.displayName)) || ('h' + i);
+    const w = handWorld(lm, key); if (!w) return; hands.push(Object.assign({ key }, w));
+  });
+  const seen = new Set();
+  for (const h of hands) {
+    seen.add(h.key);
+    const was = PHN.pinchOn.get(h.key) || false, on = was ? h.ratio < 0.42 : h.ratio < 0.28;
+    h.pinch = on; PHN.pinchOn.set(h.key, on);
+    const pw = [(h.pts[4][0] + h.pts[8][0]) / 2, (h.pts[4][1] + h.pts[8][1]) / 2, (h.pts[4][2] + h.pts[8][2]) / 2]; h.pp = pw;
+    const ps = M4.pt(XR_MI, pw);
+    if (on && !was) phonePinchStart(h, ps); else if (!on && was) phonePinchEnd(h.key);
+    if (on) phoneGrabMove(h, ps);
+  }
+  for (const k of [...PHN.hg.keys()]) if (!seen.has(k)) { phonePinchEnd(k); PHN.pinchOn.set(k, false); }
+  if (!hands.length) PHN.hprev.clear();
+  phoneColliders(hands);
+  PHN.H = hands;
+  // virtual fingertip dots
+  xiN = 0;
+  const rr = r => r / PHN.scale, push = (p, r, shade) => { if (xiN >= 64) return; const q = M4.pt(XR_MI, p), o = xiN * 12; XI[o] = q[0]; XI[o + 1] = q[1]; XI[o + 2] = q[2]; XI[o + 3] = 2; XI[o + 4] = 0; XI[o + 5] = 0; XI[o + 6] = 0; XI[o + 7] = 1; XI[o + 8] = XI[o + 9] = XI[o + 10] = rr(r); XI[o + 11] = shade; xiN++; };
+  for (const h of hands) { for (const i of [0, 4, 8, 12, 16, 20]) push(h.pts[i], 0.005, 0); if (h.pinch) push(h.pp, 0.012, 0); }
+  if (PHN.hintT && now > PHN.hintT) { PHN.hintT = 0; $('phHint').style.opacity = 0; }
+}
+
+// ---- touch / mouse on the canvas
+function phoneBindPointer() {
+  let ax = 0;
+  const movePt = e => {
+    const pt = PHN.pt; if (!pt || pt.id !== e.pointerId) return;
+    const dx = e.clientX - pt.x, dy = e.clientY - pt.y; pt.x = e.clientX; pt.y = e.clientY;
+    if (pt.mode === 'look') { PHN.lookYaw -= dx * 0.005; PHN.lookPitch = clamp(PHN.lookPitch + dy * 0.005, -1.4, 1.2); return; }
+    const sr = simRay(phoneRay(e.clientX, e.clientY)), f = simFwd(), den = Math.max(0.2, sr.rd[0] * f[0] + sr.rd[1] * f[1] + sr.rd[2] * f[2]);
+    if (pt.mode === 'lure') { const t = pt.t / den; lureSet(sr.ro[0] + sr.rd[0] * t, sr.ro[1] + sr.rd[1] * t, sr.ro[2] + sr.rd[2] * t); }
+    else if (pt.mode === 'kelp') { if (sr.rd[1] < -0.02) { const t = -sr.ro[1] / sr.rd[1]; kelp.move(pt.c, sr.ro[0] + sr.rd[0] * t, sr.ro[2] + sr.rd[2] * t); } }
+    else if (pt.mode === 'grab') {
+      const t = pt.t / den; let tg = [sr.ro[0] + sr.rd[0] * t, sr.ro[1] + sr.rd[1] * t, sr.ro[2] + sr.rd[2] * t];
+      const o = [tg[0] - pt.c[0], tg[1] - pt.c[1], tg[2] - pt.c[2]], l = Math.hypot(...o); if (l > 1.2) tg = [pt.c[0] + o[0] / l * 1.2, pt.c[1] + o[1] / l * 1.2, pt.c[2] + o[2] / l * 1.2];
+      tg[1] = Math.max(0.02, tg[1]); world.moveGrab(tg, 0);
+    }
+  };
+  canvas.addEventListener('pointerdown', e => {
+    if (!PHN.on || PHN.pt) return;
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) { }
+    const ray = phoneRay(e.clientX, e.clientY); PHN.pt = { id: e.pointerId, x: e.clientX, y: e.clientY, mode: null };
+    if (PHN.mode === 'place') { // tap = put the shark on the surface under the finger
+      const gp = groundHit(ray.rd); PHN.pos = gp; PHN.yaw = faceYaw([0, PHN.floor, 0], gp); applyPlace({ pos: gp, yaw: PHN.yaw, scale: PHN.scale });
+      PHN.mode = 'play'; $('phRet').style.display = 'none'; $('phSheet').classList.add('closed'); phoneHint('Placed. Pinch the shark with your fingers, or drag it on screen.', 5000); PHN.pt = null; return;
+    }
+    const sr = simRay(ray), f = simFwd();
+    if (ST.lure && lure.s > 0.3) {
+      const vx = lure.p[0] - sr.ro[0], vy = lure.p[1] - sr.ro[1], vz = lure.p[2] - sr.ro[2], tt = vx * sr.rd[0] + vy * sr.rd[1] + vz * sr.rd[2];
+      if (tt > 0 && Math.hypot(vx - sr.rd[0] * tt, vy - sr.rd[1] * tt, vz - sr.rd[2] * tt) < 0.2) { lure.grab = true; PHN.pt.mode = 'lure'; PHN.pt.t = vx * f[0] + vy * f[1] + vz * f[2]; return; }
+    }
+    const v = world.pickVertex(sr.ro, sr.rd);
+    if (v >= 0) { world.beginGrab(v, f); const c = world.S.grab.c0; PHN.pt.mode = 'grab'; PHN.pt.c = c; PHN.pt.t = (c[0] - sr.ro[0]) * f[0] + (c[1] - sr.ro[1]) * f[1] + (c[2] - sr.ro[2]) * f[2]; if (ST.pause) { ST.pause = false; $('cPause').checked = false; } return; }
+    if (ST.kelp) { const kc = kelp.pick(sr.ro, sr.rd, 0.12); if (kc >= 0) { PHN.pt.mode = 'kelp'; PHN.pt.c = kc; return; } }
+    if (PHN.noSensor) PHN.pt.mode = 'look';
+  });
+  canvas.addEventListener('pointermove', movePt);
+  const up = e => { const pt = PHN.pt; if (!pt || pt.id !== e.pointerId) return; if (pt.mode === 'grab') world.endGrab(); else if (pt.mode === 'lure') lure.grab = false; PHN.pt = null; };
+  canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+}
+
+// ---- hand model
+async function phoneHandsInit() {
+  const st = $('phSt'); st.textContent = 'Hands: loading model…';
+  try {
+    let mod; try { mod = await import(MP_VER + '/vision_bundle.mjs'); } catch (e1) { mod = await import(MP_VER + '/vision_bundle.js'); }
+    const fs = await mod.FilesetResolver.forVisionTasks(MP_VER + '/wasm');
+    const mk = d => mod.HandLandmarker.createFromOptions(fs, { baseOptions: { modelAssetPath: HAND_MODEL, delegate: d }, runningMode: 'VIDEO', numHands: 2 });
+    try { PHN.hl = await mk('GPU'); } catch (e) { PHN.hl = await mk('CPU'); }
+    st.textContent = 'Hands: ready — show your hand to the camera';
+  } catch (e) { st.textContent = 'Hands unavailable (' + String(e && e.message || e).slice(0, 70) + '). Drag the shark on screen instead.'; }
+}
+function phoneHint(t, ms) { const h = $('phHint'); h.textContent = t; h.style.opacity = 1; PHN.hintT = ms ? performance.now() + ms : 0; }
+
+// ---- enter / exit
+function onOri(e) { if (e.alpha == null || e.beta == null) return; PHN.ori = { alpha: e.alpha, beta: e.beta, gamma: e.gamma || 0 }; PHN.noSensor = false; }
+async function phoneStart() {
+  if (PHN.on || !gpuOK) return;
+  const hint = $('phHint');
+  try { if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') await DeviceOrientationEvent.requestPermission(); } catch (e) { }
+  try {
+    PHN.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+    const v = $('phVid'); v.srcObject = PHN.stream; await v.play().catch(() => { });
+  } catch (e) { alert('Camera unavailable: ' + (e && e.message || e)); return; }
+  if (ST.cell < 0.06) { ST.cell = 0.06; $('sDetail').value = '0.06'; loadWorld(0.06); }
+  PHN.on = true; PHN.mode = 'place'; PHN.placed = false; PHN.h0 = null; PHN.ori = null; PHN.lookYaw = 0; PHN.lookPitch = -0.35; PHN.hg.clear(); PHN.pinchOn.clear();
+  document.body.classList.add('ph'); document.body.classList.remove('camhash');
+  window.addEventListener('deviceorientation', onOri); window.addEventListener('deviceorientationabsolute', onOri);
+  $('phRet').style.display = 'block'; $('phSheet').classList.add('closed'); phoneHint('Aim at the floor or a table and tap the screen to place the shark', 0);
+  setTimeout(() => { if (PHN.on && !PHN.ori) { PHN.noSensor = true; phoneHint('No motion sensor found — drag on empty space to look around, then tap to place', 0); } }, 1500);
+  phoneSync(); resize(); setTimeout(resize, 200);
+  if (PHN.hands && !PHN.hl) phoneHandsInit();
+}
+function phoneExit() {
+  if (!PHN.on) return;
+  for (const k of [...PHN.hg.keys()]) phonePinchEnd(k);
+  if (PHN.pt && PHN.pt.mode === 'grab') world.endGrab(); lure.grab = false; PHN.pt = null;
+  PHN.on = false; document.body.classList.remove('ph'); world.setColliders(CB, 0); xiN = 0; XI.fill(0);
+  window.removeEventListener('deviceorientation', onOri); window.removeEventListener('deviceorientationabsolute', onOri);
+  if (PHN.stream) { PHN.stream.getTracks().forEach(t => t.stop()); PHN.stream = null; } $('phVid').srcObject = null;
+  resize();
+}
+function phoneSync() {
+  const set = (id, on) => $(id).setAttribute('aria-pressed', !!on);
+  set('pSwish', ST.swishT); set('pOcean', ST.ocean); set('pSwim', ST.swim); set('pLure', ST.lure); set('pKelp', ST.kelp); set('pLight', ST.luT); set('pHands', PHN.hands);
+}
+function phoneBindUI() {
+  $('bCam').onclick = phoneStart;
+  if (/#cam/.test(location.hash)) document.body.classList.add('camhash');
+  $('phHandle').onclick = () => $('phSheet').classList.toggle('closed');
+  const b = (id, fn) => { $(id).onclick = () => { fn(); phoneSync(); }; };
+  b('pGulp', A.gulp); b('pSwish', A.swish); b('pOcean', A.ocean); b('pSwim', A.swim); b('pLure', A.lure); b('pKrill', A.krill); b('pLight', A.light); b('pReset', A.reset);
+  b('pKelp', () => { ST.kelp = !ST.kelp; $('cKelp').checked = ST.kelp; });
+  b('pHands', () => { PHN.hands = !PHN.hands; if (PHN.hands && !PHN.hl) phoneHandsInit(); else if (!PHN.hands) { for (const k of [...PHN.hg.keys()]) phonePinchEnd(k); } });
+  b('pMove', () => { PHN.mode = 'place'; PHN.placed = true; $('phRet').style.display = 'block'; $('phSheet').classList.add('closed'); phoneHint('Aim at a new spot and tap to place', 0); });
+  b('pExit', phoneExit);
+  const sc = v => 0.06 * Math.pow(8, v / 100);
+  $('pSize').value = String(Math.round(Math.log(PHN.scale / 0.06) / Math.log(8) * 100));
+  $('pSize').oninput = e => { PHN.scale = sc(+e.target.value); applyPlace({ pos: PHN.pos, yaw: PHN.yaw, scale: PHN.scale }); };
+  $('pFloor').oninput = e => { PHN.floor = 0.4 + e.target.value / 100 * 1.6; };
+  $('pFirm').oninput = e => { ST.firm = e.target.value / 100; $('sFirm').value = e.target.value; $('oFirm').textContent = e.target.value; };
+  phoneBindPointer();
+  window.__phone = { start: phoneStart, exit: phoneExit, PHN, setFake: f => { PHN.fake = f; } };
+}
+phoneBindUI();
 //#endregion
 </script>
 </body></html>
