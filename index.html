@@ -131,7 +131,7 @@ select{font:500 12px var(--sans);background:transparent;color:var(--ink);border:
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v11 - 11-07_22:44Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v12 - 11-07_22:50Z</p>
  </aside>
 </div>
 <script type="module">
@@ -613,14 +613,16 @@ function createWorld(cell) {
   // pseudo-fluid propulsion: no water in the sim, so a gentle controller supplies forward thrust, a turn rate and depth hold
   const SW = { home: null, wasGrab: false, om: 0 };
   function swimDrive(dt) {
-    if (grabs.size) { SW.wasGrab = true; return; }
+    if (grabs.size) { SW.wasGrab = true; SW.fh = null; return; }
     const oc = Math.max(0, Math.min(1, (S.drag - 0.05) / 0.85));
     if (S.swim < 0.02) { // ocean gravity alone: lift off the floor to a gentle float, stay level
-      SW.home = null; S.bend = 0;
+      SW.home = null; S.bend = 0; if (SW.fh === undefined) SW.fh = null;
       if (oc > 0.05) {
         upright(dt, 0.45 * oc);
         let cy = 0, my = 0; for (let i = 0; i < nv * 3; i += 3) { cy += pos[i + 1]; my += vel[i + 1]; } cy /= nv; my /= nv;
-        if (cy < 0.6) { const vt = Math.min(0.28, (0.6 - cy) * 1.1), k = Math.min(1, 2.5 * dt) * oc; for (let i = 1; i < nv * 3; i += 3) vel[i] += (vt - my) * k; }
+        if (SW.fh == null || SW.wasGrab) { SW.fh = Math.max(0.6, cy); SW.wasGrab = false; SW.ei = 0; } // float where you let it go
+        SW.ei = Math.max(-0.5, Math.min(0.5, SW.ei + (SW.fh - cy) * dt * 0.8));
+        const vt = Math.max(-0.35, Math.min(0.35, (SW.fh - cy) * 2.0 + SW.ei)), k = Math.min(1, 2.5 * dt) * oc; for (let i = 1; i < nv * 3; i += 3) vel[i] += (vt - my) * k;
       }
       return;
     }
@@ -628,7 +630,7 @@ function createWorld(cell) {
     let cx = 0, cy = 0, cz = 0, mx = 0, my = 0, mz = 0;
     for (let i = 0; i < nv * 3; i += 3) { cx += pos[i]; cy += pos[i + 1]; cz += pos[i + 2]; mx += vel[i]; my += vel[i + 1]; mz += vel[i + 2]; }
     cx /= nv; cy /= nv; cz /= nv; mx /= nv; my /= nv; mz /= nv;
-    if (!SW.home || SW.wasGrab) { SW.home = [cx, cz]; S.swimH = Math.max(0.75, cy); SW.wasGrab = false; } // where you let go is where it swims
+    if (!SW.home || SW.wasGrab) { SW.home = [cx, cz]; S.swimH = Math.max(0.75, cy); SW.wasGrab = false; SW.ei = 0; } // where you let go is where it swims
     let hx = 0, hz = 0, tx = 0, tz = 0;
     for (const v of headIdx) { hx += pos[3 * v]; hz += pos[3 * v + 2]; } for (const v of tailIdx) { tx += pos[3 * v]; tz += pos[3 * v + 2]; }
     hx /= headIdx.length || 1; hz /= headIdx.length || 1; tx /= tailIdx.length || 1; tz /= tailIdx.length || 1;
@@ -643,7 +645,8 @@ function createWorld(cell) {
       cr_ = S.cruise * (el < 0.9 ? 0.55 : 0.75); vyH = Math.max(-0.35, Math.min(0.35, (S.hunt[1] - mf.f[1]) * 0.9));
     } else if (dh > 1.3) { const cr = fx * dz - fz * dx; wT += Math.max(-1, Math.min(1, -cr / dh)) * Math.min(1.2, (dh - 1.3)); }
     SW.om += (wT - SW.om) * Math.min(1, 1.5 * dt);
-    const vyT = vyH !== null ? vyH : Math.max(-0.5, Math.min(0.5, (S.swimH - cy) * 1.2));
+    SW.ei = Math.max(-0.5, Math.min(0.5, (SW.ei || 0) + (S.swimH - cy) * dt * 0.8));
+    const vyT = vyH !== null ? vyH : Math.max(-0.5, Math.min(0.5, (S.swimH - cy) * 2.0 + SW.ei));
     const ax = (fx * cr_ * sw - mx) * k, ay = (vyT * sw - my) * k, az = (fz * cr_ * sw - mz) * k;
     let num = 0, den = 0;
     for (let i = 0; i < nv * 3; i += 3) { const rx = pos[i] - cx, rz = pos[i + 2] - cz; num += rz * (vel[i] - mx) - rx * (vel[i + 2] - mz); den += rx * rx + rz * rz; }
@@ -820,7 +823,7 @@ function createKrill(world) {
   K.step = (dt, gulp) => {
     if (!K.n) return;
     buildGrid();
-    const mf = world.mouthFrame(), subs = 2, h = dt / subs;
+    const mf = world.mouthFrame(), subs = 2, h = dt / subs, hc_ = world.cols(), hca = hc_.a, hcn = hc_.n, ihd = 1 / Math.max(dt, 1e-3);
     for (let s = 0; s < subs; s++) {
       for (let k = 0; k < K.n; k++) {
         const q = K.q, o = 4 * k;
@@ -853,6 +856,10 @@ function createKrill(world) {
         for (let e = -1; e <= 1; e += 2) {
           const cx = K.p[3 * k] + ax[0] * K_HALF * e, cy = K.p[3 * k + 1] + ax[1] * K_HALF * e, cz = K.p[3 * k + 2] + ax[2] * K_HALF * e;
           if (cy < K_R) contact(k, ax, cx, cy, cz, 0, 1, 0, K_R - cy, 0, 0, 0);
+          for (let c = 0; c < hcn; c++) { // hands push krill too
+            const q8 = c * 8, R = hca[q8 + 3] + K_R, dx = cx - hca[q8], dy = cy - hca[q8 + 1], dz = cz - hca[q8 + 2], d2 = dx * dx + dy * dy + dz * dz;
+            if (d2 < R * R) { const d = Math.sqrt(d2) || 1e-6; contact(k, ax, cx, cy, cz, dx / d, dy / d, dz / d, R - d, (hca[q8] - hca[q8 + 4]) * ihd, (hca[q8 + 1] - hca[q8 + 5]) * ihd, (hca[q8 + 2] - hca[q8 + 6]) * ihd); }
+          }
           // jelly
           const pos = world.pos;
           const gx = Math.floor((cx - gMin[0]) / CS), gy = Math.floor((cy - gMin[1]) / CS), gz = Math.floor((cz - gMin[2]) / CS);
@@ -913,7 +920,7 @@ function createKelp(world) {
     const th = (c + 0.2 + rnd() * 0.6) / KELP_CLUMPS * 2 * Math.PI, rr = 1.95 + rnd() * 0.4, cx = 1.5 + Math.cos(th) * rr, cz = Math.sin(th) * rr;
     for (let m = 0; m < KELP_PER; m++) {
       const i = c * KELP_PER + m, bx = cx + (rnd() - 0.5) * 0.28, bz = cz + (rnd() - 0.5) * 0.28, sp = 0.14 + rnd() * 0.08;
-      st.push({ bx, bz, sp, w: 0.050 + rnd() * 0.016, ph: rnd() * 6.28, side: [rnd() - 0.5, 0.2, rnd() - 0.5], hue: rnd() });
+      st.push({ cl: c, bx, bz, sp, w: 0.050 + rnd() * 0.016, ph: rnd() * 6.28, side: [rnd() - 0.5, 0.2, rnd() - 0.5], hue: rnd() });
       for (let j = 0; j < KELP_SEG; j++) { const o = (i * KELP_SEG + j) * 3; P[o] = bx; P[o + 1] = j * sp; P[o + 2] = bz; Pp[o] = bx; Pp[o + 1] = j * sp; Pp[o + 2] = bz; }
     }
   }
@@ -969,6 +976,23 @@ function createKelp(world) {
         }
       }
     }
+  };
+  // relocate a clump along the floor with a pinch
+  Kp.pick = (ro, rd, maxd, pt) => { // ray (or point) -> clump index, or -1
+    let best = -1, bd = maxd;
+    for (let i = 0; i < KELP_N; i++) for (let j = 1; j < KELP_SEG; j++) {
+      const o = (i * KELP_SEG + j) * 3; let d;
+      if (pt) d = Math.hypot(P[o] - pt[0], P[o + 1] - pt[1], P[o + 2] - pt[2]);
+      else { const vx = P[o] - ro[0], vy = P[o + 1] - ro[1], vz = P[o + 2] - ro[2], t = vx * rd[0] + vy * rd[1] + vz * rd[2]; if (t < 0) continue; d = Math.hypot(vx - rd[0] * t, vy - rd[1] * t, vz - rd[2] * t); }
+      if (d < bd) { bd = d; best = st[i].cl; }
+    }
+    return best;
+  };
+  Kp.root = (c) => { let x = 0, z = 0, n = 0; for (let i = 0; i < KELP_N; i++) if (st[i].cl === c) { x += st[i].bx; z += st[i].bz; n++; } return [x / n, z / n]; };
+  Kp.move = (c, x, z) => {
+    const r0 = Kp.root(c); let rx = x - 1.5, rz = z, rr = Math.hypot(rx, rz); if (rr > 2.25) { x = 1.5 + rx / rr * 2.25; z = rz / rr * 2.25; }
+    const dx = x - r0[0], dz = z - r0[1];
+    for (let i = 0; i < KELP_N; i++) if (st[i].cl === c) { st[i].bx += dx; st[i].bz += dz; for (let j = 0; j < KELP_SEG; j++) { const o = (i * KELP_SEG + j) * 3; P[o] += dx; P[o + 2] += dz; Pp[o] += dx; Pp[o + 2] += dz; } }
   };
   // one flattened ellipsoid per segment, oriented along the strand
   Kp.fill = () => {
@@ -1662,7 +1686,7 @@ function advance(dtReal) {
   const t0 = performance.now();
   // ocean / swim: krill float at the shark's depth; a swimming shark hunts the nearest one and gulps when it is at the mouth
   krill.gs += ((ST.ocean ? 0.02 : 1) - krill.gs) * Math.min(1, dt * 3); krill.dr = ST.ocean ? 1.1 : 0;
-  if (ST.ocean) krill.level = ST.swim ? S.swimH : bodyCentre()[1];
+  if (ST.ocean) { const lv = ST.swim ? S.swimH : bodyCentre()[1]; krill.level += (lv - krill.level) * Math.min(1, dt * 0.8); }
   S.hunt = null;
   if (ST.swim && krill.n) {
     const mf = world.mouthFrame(), nr = krill.nearest(mf.f[0], mf.f[1], mf.f[2], 3.2);
@@ -1843,6 +1867,8 @@ function bindPointer() {
     if (ptrs.size === 2) { drag = null; world.endGrab(); canvas.classList.remove('grabbing'); const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); return; }
     if (ptrs.size > 2) return;
     const r = pickRay(e.clientX, e.clientY), v = world.pickVertex(r.ro, r.rd);
+    const kc = (v < 0 && ST.kelp) ? kelp.pick(r.ro, r.rd, 0.14) : -1;
+    if (kc >= 0) { drag = { mode: 'kelp', c: kc, x: e.clientX, y: e.clientY }; canvas.classList.add('grabbing'); return; }
     if (v >= 0) {
       world.beginGrab(v, r.fwd); const c = world.S.grab.c0;
       const t = ((c[0] - r.ro[0]) * r.fwd[0] + (c[1] - r.ro[1]) * r.fwd[1] + (c[2] - r.ro[2]) * r.fwd[2]);
@@ -1855,6 +1881,7 @@ function bindPointer() {
     const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
     if (ptrs.size === 2) { const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y); if (pinch0 > 0) cam.dist = clamp(cam.dist * pinch0 / d, 1.6, 9); pinch0 = d; return; }
     if (!drag) return;
+    if (drag.mode === 'kelp') { const r = pickRay(e.clientX, e.clientY); if (r.rd[1] < -0.02) { const t = -r.ro[1] / r.rd[1]; kelp.move(drag.c, r.ro[0] + r.rd[0] * t, r.ro[2] + r.rd[2] * t); } return; }
     if (drag.mode === 'orbit') { cam.yaw -= dx * 0.006; cam.pitch = clamp(cam.pitch + dy * 0.006, 0.06, 1.45); return; }
     const r = pickRay(e.clientX, e.clientY);
     if (ST.twist || e.shiftKey || (e.buttons & 2)) { drag.twist += dx * 0.018; world.moveGrab(drag.c, drag.twist); return; }
@@ -2107,6 +2134,7 @@ function xrSelect(ev, down) {
   if (!down) {
     s.pinch.delete(src);
     { const g = s.grabs.get(src); if (g) { world.endGrab(g.id); s.grabs.delete(src); } }
+    if (s.kgrabs) s.kgrabs.delete(src);
     if (s.pgrab && s.pgrab.src === src) s.pgrab = null;
     return;
   }
@@ -2124,6 +2152,12 @@ function xrSelect(ev, down) {
   }
   if (!XR_MI) XR_MI = M4.inv(XR_M);
   const ro = M4.pt(XR_MI, ray.ro), rd = nrm(M4.dir(XR_MI, ray.rd));
+  if (!s.kgrabs) s.kgrabs = new Map();
+  if (ST.kelp) { // pinch a seaweed clump and slide it over the floor
+    const pk = pinchPoint(frame, src);
+    if (pk) { const ps = M4.pt(XR_MI, pk), kc = kelp.pick(null, null, 0.2, ps); if (kc >= 0) { const r0 = kelp.root(kc); s.kgrabs.set(src, { c: kc, direct: true, off: [r0[0] - ps[0], r0[1] - ps[2]] }); return; } }
+    else { const kc = world.pickVertex(ro, rd) < 0 ? kelp.pick(ro, rd, 0.12) : -1; if (kc >= 0) { s.kgrabs.set(src, { c: kc, direct: false }); return; } }
+  }
   const pp = pinchPoint(frame, src); // hand pinch close to the jelly = grab it directly, like clicking the character
   if (pp) {
     const ps = M4.pt(XR_MI, pp); let best = -1, bd = 0.45;
@@ -2209,6 +2243,12 @@ function xrFrameInner(t, frame, s) {
     const hit = panelHit(ray); let len = 1.2;
     if (hit) { len = hit.t; onPanel.add(src); const i = itemAt(hit.px, hit.py); if (i >= 0) { hover = i; ptrHoverSide = hit.px < s.items[i].x + 300 ? 0 : 1; } }
     if (s.pgrab && s.pgrab.src === src) { const d = s.pgrab.dist; faceEye(s, [ray.ro[0] + ray.rd[0] * d, ray.ro[1] + ray.rd[1] * d, ray.ro[2] + ray.rd[2] * d], eye); }
+    const kg = s.kgrabs && s.kgrabs.get(src);
+    if (kg) {
+      if (!XR_MI) XR_MI = M4.inv(XR_M);
+      if (kg.direct) { const pk = pinchPoint(frame, src); if (pk) { const ps = M4.pt(XR_MI, pk); kelp.move(kg.c, ps[0] + kg.off[0], ps[2] + kg.off[1]); } }
+      else { const ro = M4.pt(XR_MI, ray.ro), rd = nrm(M4.dir(XR_MI, ray.rd)); if (rd[1] < -0.02) { const t = -ro[1] / rd[1]; kelp.move(kg.c, ro[0] + rd[0] * t, ro[2] + rd[2] * t); } }
+    }
     const gb = s.grabs.get(src);
     if (gb) {
       if (!XR_MI) XR_MI = M4.inv(XR_M);
