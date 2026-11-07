@@ -128,7 +128,7 @@ select{font:500 12px var(--sans);background:transparent;color:var(--ink);border:
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v5 - 11-07_21:54Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v6 - 11-07_22:07Z</p>
  </aside>
 </div>
 <script type="module">
@@ -381,6 +381,11 @@ function createWorld(cell) {
   }
   for (let v = 0; v < nv; v++) iw[v] = 1 / mass[v];
   const S = { swa: 0.25, firm: 0.5, damp: 0.35, nsub: 6, time: 0, jaw: 0, flare: 0, swish: 0, swishPhase: 0, grab: null, vol: 1 };
+  const grabs = new Map(); S.grabs = grabs;
+  Object.defineProperty(S, 'grab', { get() { return grabs.values().next().value || null; }, set(v) { if (!v) grabs.clear(); } });
+  const COLMAX = 160, col = new Float32Array(COLMAX * 8), act = new Int32Array(COLMAX); let ncol = 0, nact = 0; const cstart = new Int32Array(COLMAX + 1); let cpool = null;
+  // hand colliders: spheres [x y z r | previous x y z] in sim space
+  function setColliders(a, n) { ncol = Math.min(n, COLMAX); col.set(a.subarray(0, ncol * 8)); }
   // landmark vertices
   const nearest = (tx, ty, tz, filter) => { let bi = -1, bd = 1e9; for (let v = 0; v < nv; v++) { if (filter && !filter(v)) continue; const d = Math.hypot(L.rest[3 * v] - tx, L.rest[3 * v + 1] - ty, L.rest[3 * v + 2] - tz); if (d < bd) { bd = d; bi = v; } } return bi; };
   const UF = nearest(0.0, YM + 0.03, 0.02, v => L.cavity.has(v)), LF = nearest(0.0, YM - 0.03, 0.02, v => L.cavity.has(v));
@@ -493,22 +498,41 @@ function createWorld(cell) {
     }
   }
 
-  function substep(dt, kS, kV) {
-    const g = S.grab;
+  function collideHands(si, nsub) {
+    const f1 = (si + 1) / nsub, inv = 1 / nsub;
+    for (let a = 0; a < nact; a++) {
+      const o = act[a] * 8, r = col[o + 3], r2 = r * r, px = col[o + 4], py = col[o + 5], pz = col[o + 6];
+      const mx = (col[o] - px) * inv, my = (col[o + 1] - py) * inv, mz = (col[o + 2] - pz) * inv;
+      const cx = px + (col[o] - px) * f1, cy = py + (col[o + 1] - py) * f1, cz = pz + (col[o + 2] - pz) * f1;
+      for (let q = cstart[a]; q < cstart[a + 1]; q++) {
+        const i = cpool[q] * 3;
+        const dx = pos[i] - cx; if (dx > r || dx < -r) continue;
+        const dy = pos[i + 1] - cy; if (dy > r || dy < -r) continue;
+        const dz = pos[i + 2] - cz; if (dz > r || dz < -r) continue;
+        const d2 = dx * dx + dy * dy + dz * dz; if (d2 >= r2) continue;
+        const d = Math.sqrt(d2) || 1e-6, nx = dx / d, ny = dy / d, nz = dz / d, push = r - d;
+        pos[i] += nx * push; pos[i + 1] += ny * push; pos[i + 2] += nz * push;
+        const vn = mx * nx + my * ny + mz * nz; // carry along with the hand's tangential motion (grip)
+        pos[i] += (mx - vn * nx) * 0.5; pos[i + 1] += (my - vn * ny) * 0.5; pos[i + 2] += (mz - vn * nz) * 0.5;
+      }
+    }
+  }
+  function substep(dt, kS, kV, si, nsub) {
     for (let i = 0; i < nv * 3; i += 3) {
       prev[i] = pos[i]; prev[i + 1] = pos[i + 1]; prev[i + 2] = pos[i + 2];
       vel[i + 1] -= G_ACC * dt;
       pos[i] += vel[i] * dt; pos[i + 1] += vel[i + 1] * dt; pos[i + 2] += vel[i + 2] * dt;
     }
-    if (g) {
+    if (grabs.size) {
       const at = 0.06 / (dt * dt);
-      for (let n = 0; n < g.idx.length; n++) {
+      for (const g of grabs.values()) for (let n = 0; n < g.idx.length; n++) {
         const v = g.idx[n], i = v * 3, wgt = g.wt[n];
         const f = iw[v] / (iw[v] + at / wgt);
         pos[i] += (g.tx[n] - pos[i]) * f; pos[i + 1] += (g.ty[n] - pos[i + 1]) * f; pos[i + 2] += (g.tz[n] - pos[i + 2]) * f;
       }
     }
     solveTets(dt, kS, kV);
+    if (nact) collideHands(si, nsub);
     const id = 1 / dt;
     for (let i = 0; i < nv * 3; i += 3) {
       if (pos[i + 1] < 0) {
@@ -537,7 +561,23 @@ function createWorld(cell) {
     updateActuation();
     const kS = 8 * Math.pow(100, S.firm), kV = kS * 14 + 60;
     const n = S.nsub, dt = dtFrame / n;
-    for (let s = 0; s < n; s++) substep(dt, kS, kV);
+    // keep only colliders that can touch the jelly this frame
+    nact = 0;
+    if (ncol) {
+      let x0 = 1e9, y0 = 1e9, z0 = 1e9, x1 = -1e9, y1 = -1e9, z1 = -1e9;
+      for (let i = 0; i < nv * 3; i += 3) { const x = pos[i], y = pos[i + 1], z = pos[i + 2]; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; if (z < z0) z0 = z; if (z > z1) z1 = z; }
+      for (let c = 0; c < ncol; c++) { const o = c * 8, r = col[o + 3] + 0.05; if (col[o] > x0 - r && col[o] < x1 + r && col[o + 1] > y0 - r && col[o + 1] < y1 + r && col[o + 2] > z0 - r && col[o + 2] < z1 + r) act[nact++] = c; }
+    }
+    if (nact) { // per-collider candidate vertices (those that can reach it this frame), so the substeps only scan a few
+      if (!cpool) cpool = new Int32Array(Math.min(nv * 24, 400000));
+      let w = 0;
+      for (let a = 0; a < nact; a++) {
+        cstart[a] = w; const o = act[a] * 8, reach = col[o + 3] + 0.12 + Math.hypot(col[o] - col[o + 4], col[o + 1] - col[o + 5], col[o + 2] - col[o + 6]);
+        for (let v = 0; v < nv && w < cpool.length; v++) { const i = v * 3; if (Math.abs(pos[i] - col[o]) < reach && Math.abs(pos[i + 1] - col[o + 1]) < reach && Math.abs(pos[i + 2] - col[o + 2]) < reach) cpool[w++] = v; }
+      }
+      cstart[nact] = w;
+    }
+    for (let s = 0; s < n; s++) substep(dt, kS, kV, s, n);
     edgeDamp(S.damp * 0.45);
     const dec = Math.exp(-0.25 * dtFrame);
     for (let i = 0; i < vel.length; i++) vel[i] *= dec;
@@ -570,14 +610,14 @@ function createWorld(cell) {
     }
     return best;
   }
-  function beginGrab(v, fwd) {
+  function beginGrab(v, fwd, id = 0) {
     const c = P(v), idx = [], off = [];
     for (let u = 0; u < nv; u++) { const d = Math.hypot(pos[3 * u] - c[0], pos[3 * u + 1] - c[1], pos[3 * u + 2] - c[2]); if (d < 0.1) { idx.push(u); off.push([pos[3 * u] - c[0], pos[3 * u + 1] - c[1], pos[3 * u + 2] - c[2], 1 - d / 0.1]); } }
-    S.grab = { idx: Int32Array.from(idx), off, wt: Float32Array.from(off.map(o => 0.25 + 0.75 * o[3])), tx: new Float32Array(idx.length), ty: new Float32Array(idx.length), tz: new Float32Array(idx.length), c0: c, fwd, twist: 0, vtx: v };
-    moveGrab(c, 0);
+    const gr = { id, idx: Int32Array.from(idx), off, wt: Float32Array.from(off.map(o => 0.25 + 0.75 * o[3])), tx: new Float32Array(idx.length), ty: new Float32Array(idx.length), tz: new Float32Array(idx.length), c0: c, fwd, twist: 0, vtx: v };
+    grabs.set(id, gr); moveGrab(c, 0, id); return gr;
   }
-  function moveGrab(target, twist) {
-    const g = S.grab; if (!g) return;
+  function moveGrab(target, twist, id = 0) {
+    const g = grabs.get(id); if (!g) return;
     const ax = g.fwd, c = Math.cos(twist), s = Math.sin(twist);
     for (let n = 0; n < g.idx.length; n++) {
       const o = g.off[n], d = o[0] * ax[0] + o[1] * ax[1] + o[2] * ax[2];
@@ -585,9 +625,9 @@ function createWorld(cell) {
       g.tx[n] = target[0] + o[0] * c + cx * s + ax[0] * d * (1 - c); g.ty[n] = target[1] + o[1] * c + cy * s + ax[1] * d * (1 - c); g.tz[n] = target[2] + o[2] * c + cz * s + ax[2] * d * (1 - c);
     }
   }
-  const endGrab = () => { S.grab = null; };
+  const endGrab = (id = 0) => { if (id < 0) grabs.clear(); else grabs.delete(id); };
   const totalMassG = 1.05 * totalV * 1000;
-  return { L, S, YM, MOUTH, H, nv, nt, pos, vel, nrm, bnrm, computeNormals, step, reset, volumeRatio, gapeMM, mouthFrame, pickVertex, beginGrab, moveGrab, endGrab, eyeP, spirP, eyeV, totalMassG, totalV, P, surfV };
+  return { L, S, YM, MOUTH, H, nv, nt, pos, vel, nrm, bnrm, computeNormals, step, reset, volumeRatio, gapeMM, mouthFrame, pickVertex, beginGrab, moveGrab, endGrab, setColliders, eyeP, spirP, eyeV, totalMassG, totalV, P, surfV };
 }
 
 // ---------------------------------------------------------------- krill (rigid elongated beads)
@@ -1756,7 +1796,7 @@ async function enterXR(ar) {
       const bgs = ubs.map(ub => device.createBindGroup({ layout: bl, entries: [{ binding: 0, resource: { buffer: ub } }, { binding: 1, resource: tex.createView() }, { binding: 2, resource: sampler }] }));
       panelRes = { cv, tex, pPanel, pLaser, pRing, pArrow, ubs, bgs, data: new Float32Array(48) };
     }
-    xrS = { session, binding, layer, br, xm: mode, ref, ar, dirty: true, hover: -1, grab: null, pgrab: null, panelPose: null, last: 0, mode: 'play', items: [], hts: new Map(), viewerHT: null, noHT: false, ret: { ok: false, t: 0, pos: [0, 0, -0.7] }, pl: { pos: [0, ar ? 0 : 0.82, -0.7], yaw: 0, scale: ar ? 0.16 : 0.14 }, yawSet: !ar, pinch: new Set(), frames: 0, diag: `v${document.getElementById('verTag').textContent.replace('Build ','')} ${ar ? 'AR' : 'VR'} ${mode} blend:${session.environmentBlendMode || '?'} fmt:${fmt}${br ? ' fbL:' + br.layer.framebufferWidth + 'x' + br.layer.framebufferHeight : ''}` };
+    xrS = { session, binding, layer, br, xm: mode, ref, ar, dirty: true, hover: -1, grabs: new Map(), pgrab: null, hprev: new Map(), panelPose: null, last: 0, mode: 'play', items: [], hts: new Map(), viewerHT: null, noHT: false, ret: { ok: false, t: 0, pos: [0, 0, -0.7] }, pl: { pos: [0, ar ? 0 : 0.82, -0.7], yaw: 0, scale: ar ? 0.16 : 0.14 }, yawSet: !ar, pinch: new Set(), frames: 0, diag: `${document.getElementById('verTag').textContent.replace('Build ','')} ${ar ? 'AR' : 'VR'} ${mode} blend:${session.environmentBlendMode || '?'} fmt:${fmt}${br ? ' fbL:' + br.layer.framebufferWidth + 'x' + br.layer.framebufferHeight : ''}` };
     setMode(ar ? 'place' : 'play'); applyPlace(xrS.pl);
     ['selectstart', 'selectend'].forEach(n => session.addEventListener(n, ev => xrSelect(ev, n === 'selectstart')));
     if (ar) {
@@ -1769,7 +1809,7 @@ async function enterXR(ar) {
         Array.from(session.inputSources).forEach(addSrc);
       }
     }
-    session.addEventListener('end', () => { const dg = xrS ? `${xrS.diag} frames:${xrS.frames}${xrErrs.length ? ' ERR: ' + xrErrs.join(' | ') : ''}` : ''; xrS = null; XI.fill(0); xiN = 0; if (fmt0) { setFmt(fmt0); fmt0 = null; } canvas.width = 0; resize(); $('vrNote').textContent = 'Last XR session → ' + dg; lastT = performance.now(); requestAnimationFrame(frame); });
+    session.addEventListener('end', () => { world.endGrab(-1); world.setColliders(CB, 0); const dg = xrS ? `${xrS.diag} frames:${xrS.frames}${xrErrs.length ? ' ERR: ' + xrErrs.join(' | ') : ''}` : ''; xrS = null; XI.fill(0); xiN = 0; if (fmt0) { setFmt(fmt0); fmt0 = null; } canvas.width = 0; resize(); $('vrNote').textContent = 'Last XR session → ' + dg; lastT = performance.now(); requestAnimationFrame(frame); });
     session.requestAnimationFrame(xrFrame);
   } catch (e) { console.error(e); $('vrNote').textContent = 'Could not start ' + (ar ? 'AR' : 'VR') + ': ' + e.message; }
 }
@@ -1814,12 +1854,13 @@ function panelHit(ray) {
   return { t, px, py };
 }
 function itemAt(px, py) { const L = xrS.items; for (let i = 0; i < L.length; i++) { const it = L[i]; if (px >= it.x && px <= it.x + it.w && py >= it.y && py <= it.y + it.h) return i; } return -1; }
+function freeGrabId(s) { const used = new Set([...s.grabs.values()].map(g => g.id)); let i = 1; while (used.has(i)) i++; return i; }
 function xrSelect(ev, down) {
   const s = xrS; if (!s) return;
   const frame = ev.frame, src = ev.inputSource, ray = rayFromSource(frame, src); if (!ray) return;
   if (!down) {
     s.pinch.delete(src);
-    if (s.grab && s.grab.src === src) { world.endGrab(); s.grab = null; }
+    { const g = s.grabs.get(src); if (g) { world.endGrab(g.id); s.grabs.delete(src); } }
     if (s.pgrab && s.pgrab.src === src) s.pgrab = null;
     return;
   }
@@ -1841,10 +1882,49 @@ function xrSelect(ev, down) {
   if (pp) {
     const ps = M4.pt(XR_MI, pp); let best = -1, bd = 0.45;
     for (const v of world.surfV) { const d = Math.hypot(world.pos[3 * v] - ps[0], world.pos[3 * v + 1] - ps[1], world.pos[3 * v + 2] - ps[2]); if (d < bd) { bd = d; best = v; } }
-    if (best >= 0) { world.beginGrab(best, rd); const c = world.S.grab.c0; s.grab = { src, direct: true, off: [c[0] - ps[0], c[1] - ps[1], c[2] - ps[2]] }; return; }
+    if (best >= 0) { const id = freeGrabId(s), c = world.beginGrab(best, rd, id).c0; s.grabs.set(src, { id, direct: true, off: [c[0] - ps[0], c[1] - ps[1], c[2] - ps[2]] }); return; }
   }
   const v = world.pickVertex(ro, rd);
-  if (v >= 0) { world.beginGrab(v, rd); const c = world.S.grab.c0; s.grab = { src, dist: Math.hypot(c[0] - ro[0], c[1] - ro[1], c[2] - ro[2]) }; }
+  if (v >= 0) { const id = freeGrabId(s), c = world.beginGrab(v, rd, id).c0; s.grabs.set(src, { id, dist: Math.hypot(c[0] - ro[0], c[1] - ro[1], c[2] - ro[2]) }); }
+}
+// ---- hand colliders: every joint, bone midpoint and palm point becomes a small sphere the jelly can't enter
+const CB = new Float32Array(160 * 8);
+const HJ = { thumb: ['thumb-metacarpal', 'thumb-phalanx-proximal', 'thumb-phalanx-distal', 'thumb-tip'], index: ['index-finger-metacarpal', 'index-finger-phalanx-proximal', 'index-finger-phalanx-intermediate', 'index-finger-phalanx-distal', 'index-finger-tip'], middle: ['middle-finger-metacarpal', 'middle-finger-phalanx-proximal', 'middle-finger-phalanx-intermediate', 'middle-finger-phalanx-distal', 'middle-finger-tip'], ring: ['ring-finger-metacarpal', 'ring-finger-phalanx-proximal', 'ring-finger-phalanx-intermediate', 'ring-finger-phalanx-distal', 'ring-finger-tip'], pinky: ['pinky-finger-metacarpal', 'pinky-finger-phalanx-proximal', 'pinky-finger-phalanx-intermediate', 'pinky-finger-phalanx-distal', 'pinky-finger-tip'] };
+function buildHandColliders(frame, s) {
+  let n = 0; const sc = s.pl.scale;
+  if (s.mode === 'play') for (const src of s.session.inputSources) {
+    if (!src.hand || s.grabs.has(src)) continue; // a pinching hand holds the jelly instead of bumping it
+    const P = {}, R = {}; let ok = true;
+    for (const [name, js] of src.hand) { const jp = frame.getJointPose(js, s.ref); if (!jp) { ok = false; break; } const q = jp.transform.position; P[name] = [q.x, q.y, q.z]; R[name] = Math.max(0.007, jp.radius || 0.008); }
+    if (!ok || !P.wrist) { s.hprev.delete(src); continue; }
+    const pv = s.hprev.get(src) || new Map(), nx = new Map();
+    const add = (key, p, r) => {
+      if (n >= 160) return; const q = M4.pt(XR_MI, p), o = n * 8, old = pv.get(key) || q;
+      CB[o] = q[0]; CB[o + 1] = q[1]; CB[o + 2] = q[2]; CB[o + 3] = r * 1.15 / sc; CB[o + 4] = old[0]; CB[o + 5] = old[1]; CB[o + 6] = old[2]; n++; nx.set(key, q);
+    };
+    const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+    add('wrist', P.wrist, 0.03);
+    for (const f of Object.keys(HJ)) {
+      const ch = HJ[f];
+      for (let i = 0; i < ch.length; i++) {
+        const a = P[ch[i]]; if (!a) continue;
+        if (i > 0 && P[ch[i - 1]]) add(f + 'm' + i, mid(P[ch[i - 1]], a), (R[ch[i]] + R[ch[i - 1]]) / 2);
+        add(f + i, a, i === 0 ? Math.max(R[ch[i]], 0.014) : R[ch[i]]);
+      }
+    }
+    // palm: fill between the wrist and the finger bases, plus the knuckle row
+    const base = ['index', 'middle', 'ring', 'pinky'].map(f => P[HJ[f][0]]).filter(Boolean);
+    if (base.length === 4) {
+      const c = [0, 1, 2].map(k => (P.wrist[k] + base[0][k] + base[1][k] + base[2][k] + base[3][k]) / 5);
+      add('palm', c, 0.035);
+      for (let i = 0; i < 4; i++) add('pw' + i, mid(P.wrist, base[i]), 0.026);
+      const k1 = ['index', 'middle', 'ring', 'pinky'].map(f => P[HJ[f][1]]);
+      for (let i = 0; i < 3; i++) { if (k1[i] && k1[i + 1]) add('kn' + i, mid(k1[i], k1[i + 1]), 0.014); add('bb' + i, mid(base[i], base[i + 1]), 0.02); }
+      for (let i = 0; i < 4; i++) if (k1[i]) add('pm' + i, mid(base[i], k1[i]), 0.016);
+    }
+    s.hprev.set(src, nx);
+  }
+  world.setColliders(CB, n);
 }
 function updateReticle(frame, s, skip, eye, fwd) {
   if (s.noHT) { s.ret.ok = true; s.ret.t = performance.now(); s.ret.pos = [eye[0] + fwd[0] * 0.9, 0, eye[2] + fwd[2] * 0.9]; return; }
@@ -1883,14 +1963,15 @@ function xrFrameInner(t, frame, s) {
     const hit = panelHit(ray); let len = 1.2;
     if (hit) { len = hit.t; onPanel.add(src); const i = itemAt(hit.px, hit.py); if (i >= 0) { hover = i; ptrHoverSide = hit.px < s.items[i].x + 300 ? 0 : 1; } }
     if (s.pgrab && s.pgrab.src === src) { const d = s.pgrab.dist; faceEye(s, [ray.ro[0] + ray.rd[0] * d, ray.ro[1] + ray.rd[1] * d, ray.ro[2] + ray.rd[2] * d], eye); }
-    if (s.grab && s.grab.src === src) {
+    const gb = s.grabs.get(src);
+    if (gb) {
       if (!XR_MI) XR_MI = M4.inv(XR_M);
       let tg;
-      const pp = s.grab.direct ? pinchPoint(frame, src) : null;
-      if (pp) { const ps = M4.pt(XR_MI, pp); tg = [ps[0] + s.grab.off[0], Math.max(0.03, ps[1] + s.grab.off[1]), ps[2] + s.grab.off[2]]; }
-      else { const ro = M4.pt(XR_MI, ray.ro), rd = nrm(M4.dir(XR_MI, ray.rd)), d = s.grab.dist || 1; tg = [ro[0] + rd[0] * d, Math.max(0.03, ro[1] + rd[1] * d), ro[2] + rd[2] * d]; }
-      const c0 = world.S.grab.c0, o = [tg[0] - c0[0], tg[1] - c0[1], tg[2] - c0[2]], l = Math.hypot(...o), k = l > 1.4 ? 1.4 / l : 1;
-      world.moveGrab([c0[0] + o[0] * k, c0[1] + o[1] * k, c0[2] + o[2] * k], 0);
+      const pp = gb.direct ? pinchPoint(frame, src) : null;
+      if (pp) { const ps = M4.pt(XR_MI, pp); tg = [ps[0] + gb.off[0], Math.max(0.03, ps[1] + gb.off[1]), ps[2] + gb.off[2]]; }
+      else { const ro = M4.pt(XR_MI, ray.ro), rd = nrm(M4.dir(XR_MI, ray.rd)), d = gb.dist || 1; tg = [ro[0] + rd[0] * d, Math.max(0.03, ro[1] + rd[1] * d), ro[2] + rd[2] * d]; }
+      const c0 = world.S.grabs.get(gb.id).c0, o = [tg[0] - c0[0], tg[1] - c0[1], tg[2] - c0[2]], l = Math.hypot(...o), k = l > 1.4 ? 1.4 / l : 1;
+      world.moveGrab([c0[0] + o[0] * k, c0[1] + o[1] * k, c0[2] + o[2] * k], 0, gb.id);
     }
     if ((!src.hand || hit) && (!laser || hit)) laser = [ray.ro, [ray.ro[0] + ray.rd[0] * len, ray.ro[1] + ray.rd[1] * len, ray.ro[2] + ray.rd[2] * len]];
   }
@@ -1907,6 +1988,7 @@ function xrFrameInner(t, frame, s) {
   }
   if (!XR_MI) XR_MI = M4.inv(XR_M);
   if (hover !== s.hover || s.dirty || frameN % 12 === 0) { s.hover = hover; s.dirty = false; drawPanel(hover); }
+  buildHandColliders(frame, s);
   // hand markers: pinch dots in AR (real hands are visible), full joints in VR
   xiN = 0;
   for (const src of s.session.inputSources) {
