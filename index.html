@@ -110,6 +110,8 @@ select{font:500 12px var(--sans);background:transparent;color:var(--ink);border:
    <button class="act" id="bSwish" aria-pressed="false">Swish tail</button>
    <button class="act" id="bEyes" aria-pressed="false">Tuck the eyes</button>
    <button class="act" id="bLight" aria-pressed="false">Light up</button>
+   <button class="act" id="bOcean" aria-pressed="false">Ocean gravity</button>
+   <button class="act" id="bSwim" aria-pressed="false">Swim</button>
    <button class="act" id="bKrill">Scatter krill</button>
    <button class="act ghost" id="bReset">Reset</button>
   </div>
@@ -128,7 +130,7 @@ select{font:500 12px var(--sans);background:transparent;color:var(--ink);border:
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v6 - 11-07_22:07Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v8 - 11-07_22:19Z</p>
  </aside>
 </div>
 <script type="module">
@@ -138,9 +140,9 @@ let H = 0.04, YM = 0.10;
 const LB = 3.0, G_ACC = 14.0, FLOOR_MU = 0.35;
 const MOUTH = { c: [0.02, 0.10, 0.0], r: [0.24, 0.03, 0.235] };
 const PROFILE = [
-  [0.00, 0.200, 0.200], [0.04, 0.235, 0.235], [0.10, 0.262, 0.275], [0.20, 0.270, 0.310],
-  [0.28, 0.258, 0.310], [0.40, 0.208, 0.262], [0.54, 0.152, 0.205], [0.68, 0.104, 0.150],
-  [0.80, 0.068, 0.108], [0.88, 0.052, 0.088], [0.96, 0.048, 0.082], [1.00, 0.045, 0.080]];
+  [0.00, 0.215, 0.200], [0.04, 0.255, 0.235], [0.10, 0.282, 0.275], [0.20, 0.288, 0.310],
+  [0.28, 0.274, 0.312], [0.40, 0.230, 0.275], [0.54, 0.178, 0.222], [0.68, 0.132, 0.172],
+  [0.80, 0.098, 0.132], [0.88, 0.080, 0.110], [0.96, 0.070, 0.098], [1.00, 0.064, 0.092]];
 const PT = PROFILE.map(r => r[0]), PW = PROFILE.map(r => r[1]), PH = PROFILE.map(r => r[2]);
 const smooth = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
 const smin = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; };
@@ -174,7 +176,7 @@ function bodySdf(a, y, z) {
     d -= s * 0.008 * smooth(0.05, 0.15, W) * smooth(0.0, 0.12, a);
   }
   d = Math.max(d, -y);
-  d = smax(d, -a, 0.07);
+  d = smax(d, -(a + 0.05 * Math.min(1, (z / 0.2) * (z / 0.2))), 0.07); // rounded, shovel-shaped snout
   d = smax(d, a - 0.985 * LB, 0.05);
   return d;
 }
@@ -212,21 +214,21 @@ function finSdf(f, x, y, z) {
 }
 const FINS = [
   // first dorsal: far back, swept; second dorsal: small
-  { name: 'dorsal1', O: [1.60, 0.14, 0], S: [0.42, 1, 0], Cd: [1, 0, 0], Sp: 0.34, C: 0.27, tipP: 0.24 },
-  { name: 'dorsal2', O: [2.24, 0.07, 0], S: [0.45, 1, 0], Cd: [1, 0, 0], Sp: 0.15, C: 0.15, tipP: 0.11 },
+  { name: 'dorsal1', O: [1.22, 0.14, 0], S: [0.40, 1, 0], Cd: [1, 0, 0], Sp: 0.46, C: 0.34, tipP: 0.30 },
+  { name: 'dorsal2', O: [2.05, 0.06, 0], S: [0.45, 1, 0], Cd: [1, 0, 0], Sp: 0.19, C: 0.17, tipP: 0.12 },
   // long sickle pectorals
-  { name: 'pectL', flat: 1, O: [0.80, 0, 0.20], S: [0.34, 0, 1], Cd: [1, 0, 0], Sp: 0.60, C: 0.25, tipP: 0.42 },
-  { name: 'pectR', flat: 1, O: [0.80, 0, -0.20], S: [0.34, 0, -1], Cd: [1, 0, 0], Sp: 0.60, C: 0.25, tipP: 0.42 },
+  { name: 'pectL', flat: 1, O: [0.80, 0, 0.20], S: [0.34, 0, 1], Cd: [1, 0, 0], Sp: 0.74, C: 0.30, tipP: 0.50 },
+  { name: 'pectR', flat: 1, O: [0.80, 0, -0.20], S: [0.34, 0, -1], Cd: [1, 0, 0], Sp: 0.74, C: 0.30, tipP: 0.50 },
   // pelvics, anal
-  { name: 'pelvL', flat: 1, O: [1.62, 0, 0.10], S: [0.45, 0, 1], Cd: [1, 0, 0], Sp: 0.22, C: 0.17, tipP: 0.13 },
-  { name: 'pelvR', flat: 1, O: [1.62, 0, -0.10], S: [0.45, 0, -1], Cd: [1, 0, 0], Sp: 0.22, C: 0.17, tipP: 0.13 },
-  { name: 'anal', flat: 1, O: [2.08, 0, 0.05], S: [0.5, 0, 1], Cd: [1, 0, 0], Sp: 0.17, C: 0.14, tipP: 0.09 },
+  { name: 'pelvL', flat: 1, O: [1.55, 0, 0.10], S: [0.45, 0, 1], Cd: [1, 0, 0], Sp: 0.22, C: 0.17, tipP: 0.13 },
+  { name: 'pelvR', flat: 1, O: [1.55, 0, -0.10], S: [0.45, 0, -1], Cd: [1, 0, 0], Sp: 0.22, C: 0.17, tipP: 0.13 },
+  { name: 'anal', flat: 1, O: [2.0, 0, 0.05], S: [0.5, 0, 1], Cd: [1, 0, 0], Sp: 0.17, C: 0.14, tipP: 0.09 },
   // caudal keels
   { name: 'keelL', flat: 1, O: [2.70, 0, 0.04], S: [0.4, 0, 1], Cd: [1, 0, 0], Sp: 0.09, C: 0.18, tipP: 0.12 },
   { name: 'keelR', flat: 1, O: [2.70, 0, -0.04], S: [0.4, 0, -1], Cd: [1, 0, 0], Sp: 0.09, C: 0.18, tipP: 0.12 },
   // tall crescent tail: upper lobe + lower lobe along the table
-  { name: 'tailUp', O: [2.76, 0.02, 0], S: [0.28, 1, 0], Cd: [1, 0, 0], Sp: 0.56, C: 0.24, tipP: 0.34 },
-  { name: 'tailLo', O: [2.78, 0.0, 0], S: [1, 0.10, 0], Cd: [0, 1, 0], Sp: 0.34, C: 0.15, tipP: 0.09 },
+  { name: 'tailUp', O: [2.74, 0.02, 0], S: [0.28, 1, 0], Cd: [1, 0, 0], Sp: 0.64, C: 0.28, tipP: 0.38 },
+  { name: 'tailLo', O: [2.76, 0.0, 0], S: [1, 0.10, 0], Cd: [0, 1, 0], Sp: 0.40, C: 0.19, tipP: 0.12 },
 ].map(makeFin);
 
 function sdfAll(a, y, z) {
@@ -380,7 +382,7 @@ function createWorld(cell) {
     tq[4 * t + 3] = 1;
   }
   for (let v = 0; v < nv; v++) iw[v] = 1 / mass[v];
-  const S = { swa: 0.25, firm: 0.5, damp: 0.35, nsub: 6, time: 0, jaw: 0, flare: 0, swish: 0, swishPhase: 0, grab: null, vol: 1 };
+  const S = { swa: 0.25, firm: 0.5, damp: 0.35, nsub: 6, time: 0, jaw: 0, flare: 0, swish: 0, swishPhase: 0, grab: null, vol: 1, g: 1, drag: 0, swim: 0, swimMix: 0, bend: 0, turn: 0.32, cruise: 0.32, swimH: 0.9, hunt: null };
   const grabs = new Map(); S.grabs = grabs;
   Object.defineProperty(S, 'grab', { get() { return grabs.values().next().value || null; }, set(v) { if (!v) grabs.clear(); } });
   const COLMAX = 160, col = new Float32Array(COLMAX * 8), act = new Int32Array(COLMAX); let ncol = 0, nact = 0; const cstart = new Int32Array(COLMAX + 1); let cpool = null;
@@ -409,15 +411,21 @@ function createWorld(cell) {
     for (let i = 0; i < out.length; i += 3) { const l = Math.hypot(out[i], out[i + 1], out[i + 2]); if (l > 1e-12) { out[i] /= l; out[i + 1] /= l; out[i + 2] /= l; } }
   }
 
+  // whole-body swimming envelope: amplitude grows smoothly from head to tail but is never zero
+  const tenvS = new Float32Array(nt); for (let t = 0; t < nt; t++) { const u = Math.max(0, Math.min(1, L.tcen[3 * t] / LB)); tenvS[t] = 0.16 + 0.84 * Math.pow(u, 1.7); }
+  const headIdx = [], tailIdx = []; for (let v = 0; v < nv; v++) { const x = L.rest[3 * v]; if (x < 0.4) headIdx.push(v); else if (x > LB - 0.55) tailIdx.push(v); }
   let SWA = 0.45;
   function updateActuation() {
     SWA = S.swa || 0.45;
-    const jaw = S.jaw, fl = S.flare, sw = S.swish, ph = S.swishPhase, kw = 2 * Math.PI / 1.9;
+    const jaw = S.jaw, fl = S.flare, sw = S.swish, ph = S.swishPhase, sm_ = S.swimMix, kw = 2 * Math.PI / (1.9 + 1.5 * sm_), amp = 1 + 0.45 * sm_, bend = S.bend;
     for (let t = 0; t < nt; t++) {
       const x = L.tcen[3 * t], y = L.tcen[3 * t + 1], z = L.tcen[3 * t + 2], o = 9 * t;
       let ex = 0;
       if (jaw > 1e-4 && y > YM + 0.015) ex -= jaw * 6.5 * smooth(0.04, 0.09, x) * (1 - smooth(0.24, 0.30, x)) * (y - YM - 0.09);
-      if (sw > 1e-4) ex -= sw * SWA * L.tenv[t] * Math.cos(kw * x - ph) * Math.max(-1, Math.min(1, z / profileAt(x).W));
+      if (sw > 1e-4 || bend !== 0) {
+        const zn = Math.max(-1, Math.min(1, z / profileAt(x).W)), env = L.tenv[t] + (tenvS[t] - L.tenv[t]) * sm_;
+        ex -= sw * SWA * amp * env * Math.cos(kw * x - ph) * zn + bend * tenvS[t] * zn;
+      }
       ex = Math.max(-0.45, Math.min(0.45, ex));
       const s = 1 + 0.2 * fl * L.tgm[t];
       if (ex === 0 && s === 1) { for (let q = 0; q < 9; q++) BM[o + q] = Bst[o + q]; V0s[t] = V0[t]; continue; }
@@ -520,7 +528,7 @@ function createWorld(cell) {
   function substep(dt, kS, kV, si, nsub) {
     for (let i = 0; i < nv * 3; i += 3) {
       prev[i] = pos[i]; prev[i + 1] = pos[i + 1]; prev[i + 2] = pos[i + 2];
-      vel[i + 1] -= G_ACC * dt;
+      vel[i + 1] -= G_ACC * S.g * dt;
       pos[i] += vel[i] * dt; pos[i + 1] += vel[i + 1] * dt; pos[i + 2] += vel[i + 2] * dt;
     }
     if (grabs.size) {
@@ -556,6 +564,37 @@ function createWorld(cell) {
     }
   }
 
+  // pseudo-fluid propulsion: no water in the sim, so a gentle controller supplies forward thrust, a turn rate and depth hold
+  const SW = { home: null, wasGrab: false, om: 0 };
+  function swimDrive(dt) {
+    if (grabs.size) { SW.wasGrab = true; return; }
+    if (S.swim < 0.02) { SW.home = null; S.bend = 0; return; }
+    let cx = 0, cy = 0, cz = 0, mx = 0, my = 0, mz = 0;
+    for (let i = 0; i < nv * 3; i += 3) { cx += pos[i]; cy += pos[i + 1]; cz += pos[i + 2]; mx += vel[i]; my += vel[i + 1]; mz += vel[i + 2]; }
+    cx /= nv; cy /= nv; cz /= nv; mx /= nv; my /= nv; mz /= nv;
+    if (!SW.home || SW.wasGrab) { SW.home = [cx, cz]; S.swimH = Math.max(0.75, cy); SW.wasGrab = false; } // where you let go is where it swims
+    let hx = 0, hz = 0, tx = 0, tz = 0;
+    for (const v of headIdx) { hx += pos[3 * v]; hz += pos[3 * v + 2]; } for (const v of tailIdx) { tx += pos[3 * v]; tz += pos[3 * v + 2]; }
+    hx /= headIdx.length || 1; hz /= headIdx.length || 1; tx /= tailIdx.length || 1; tz /= tailIdx.length || 1;
+    let fx = hx - tx, fz = hz - tz; const fl = Math.hypot(fx, fz) || 1; fx /= fl; fz /= fl;
+    const sw = S.swim, k = Math.min(1, 2.2 * dt);
+    // keep the loop near where it started: steer back when it strays
+    const dx = SW.home[0] - cx, dz = SW.home[1] - cz, dh = Math.hypot(dx, dz);
+    let wT = S.turn, cr_ = S.cruise, vyH = null;
+    if (S.hunt && dh < 3.0) { // slowly turn toward the nearest krill and creep after it
+      const mf = mouthFrame(), ex = S.hunt[0] - mf.f[0], ez = S.hunt[2] - mf.f[2], el = Math.hypot(ex, ez) + 1e-6;
+      wT = Math.max(-0.8, Math.min(0.8, 1.5 * Math.atan2(fz * ex - fx * ez, fx * ex + fz * ez)));
+      cr_ = S.cruise * (el < 0.9 ? 0.55 : 0.75); vyH = Math.max(-0.35, Math.min(0.35, (S.hunt[1] - mf.f[1]) * 0.9));
+    } else if (dh > 1.3) { const cr = fx * dz - fz * dx; wT += Math.max(-1, Math.min(1, -cr / dh)) * Math.min(1.2, (dh - 1.3)); }
+    SW.om += (wT - SW.om) * Math.min(1, 1.5 * dt);
+    const vyT = vyH !== null ? vyH : Math.max(-0.5, Math.min(0.5, (S.swimH - cy) * 1.2));
+    const ax = (fx * cr_ * sw - mx) * k, ay = (vyT * sw - my) * k, az = (fz * cr_ * sw - mz) * k;
+    let num = 0, den = 0;
+    for (let i = 0; i < nv * 3; i += 3) { const rx = pos[i] - cx, rz = pos[i + 2] - cz; num += rz * (vel[i] - mx) - rx * (vel[i + 2] - mz); den += rx * rx + rz * rz; }
+    const wc = num / (den || 1), dw = (SW.om * sw - wc) * k;
+    for (let i = 0; i < nv * 3; i += 3) { const rx = pos[i] - cx, rz = pos[i + 2] - cz; vel[i] += ax + dw * rz; vel[i + 1] += ay; vel[i + 2] += az - dw * rx; }
+    S.bend = Math.max(-0.14, Math.min(0.14, SW.om * 0.55)) * sw; // lean the body into the turn
+  }
   function step(dtFrame) {
     S.time += dtFrame;
     updateActuation();
@@ -579,7 +618,8 @@ function createWorld(cell) {
     }
     for (let s = 0; s < n; s++) substep(dt, kS, kV, s, n);
     edgeDamp(S.damp * 0.45);
-    const dec = Math.exp(-0.25 * dtFrame);
+    swimDrive(dtFrame);
+    const dec = Math.exp(-(0.25 + S.drag) * dtFrame);
     for (let i = 0; i < vel.length; i++) vel[i] *= dec;
   }
   function volumeRatio() {
@@ -591,7 +631,7 @@ function createWorld(cell) {
     }
     return v / v0;
   }
-  function reset() { pos.set(L.rest); vel.fill(0); for (let t = 0; t < nt; t++) { tq[4 * t] = tq[4 * t + 1] = tq[4 * t + 2] = 0; tq[4 * t + 3] = 1; } S.jaw = 0; S.flare = 0; S.swish = 0; S.grab = null; }
+  function reset() { pos.set(L.rest); vel.fill(0); for (let t = 0; t < nt; t++) { tq[4 * t] = tq[4 * t + 1] = tq[4 * t + 2] = 0; tq[4 * t + 3] = 1; } S.jaw = 0; S.flare = 0; S.swish = 0; S.grab = null; S.swim = 0; S.swimMix = 0; S.bend = 0; S.g = 1; S.drag = 0; SW.home = null; SW.om = 0; }
   const P = (v) => [pos[3 * v], pos[3 * v + 1], pos[3 * v + 2]];
   function mouthFrame() {
     const uf = P(UF), lf = P(LF), ub = P(UB), lb = P(LB_);
@@ -633,19 +673,23 @@ function createWorld(cell) {
 // ---------------------------------------------------------------- krill (rigid elongated beads)
 const KMAX = 260, K_HALF = 0.018, K_R = 0.0125;
 function createKrill(world) {
-  const K = { n: 0, p: new Float32Array(KMAX * 3), q: new Float32Array(KMAX * 4), v: new Float32Array(KMAX * 3), w: new Float32Array(KMAX * 3), shade: new Float32Array(KMAX), eaten: 0, inst: new Float32Array((KMAX + 2) * 12), grid: null };
+  const K = { n: 0, p: new Float32Array(KMAX * 3), q: new Float32Array(KMAX * 4), v: new Float32Array(KMAX * 3), w: new Float32Array(KMAX * 3), shade: new Float32Array(KMAX), eaten: 0, gs: 1, dr: 0, level: 0.5, inst: new Float32Array((KMAX + 2) * 12), grid: null };
   const rnd = Math.random;
-  K.spawn = (cnt) => {
+  K.spawn = (cnt, around) => {
     for (let i = 0; i < cnt; i++) {
       let k; if (K.n < KMAX) k = K.n++; else k = (rnd() * KMAX) | 0;
       const front = rnd() < 0.8;
-      K.p[3 * k] = front ? -0.15 - rnd() * 0.95 : 0.6 + rnd() * 1.8; K.p[3 * k + 1] = 0.25 + rnd() * 0.9; K.p[3 * k + 2] = (rnd() - 0.5) * (front ? 1.1 : 2.0);
+      if (around) { // ocean mode: a cloud floating around the shark at its own depth
+        const th = rnd() * 6.2832, rr = 0.7 + rnd() * 1.5;
+        K.p[3 * k] = around[0] + Math.cos(th) * rr; K.p[3 * k + 1] = Math.max(0.15, around[1] + (rnd() - 0.5) * 0.5); K.p[3 * k + 2] = around[2] + Math.sin(th) * rr;
+      } else { K.p[3 * k] = front ? -0.15 - rnd() * 0.95 : 0.6 + rnd() * 1.8; K.p[3 * k + 1] = 0.25 + rnd() * 0.9; K.p[3 * k + 2] = (rnd() - 0.5) * (front ? 1.1 : 2.0); }
       const q = [rnd() - 0.5, rnd() - 0.5, rnd() - 0.5, rnd() - 0.5], l = Math.hypot(...q);
       for (let c = 0; c < 4; c++) K.q[4 * k + c] = q[c] / l;
       K.v[3 * k] = (rnd() - 0.5) * 0.3; K.v[3 * k + 1] = 0; K.v[3 * k + 2] = (rnd() - 0.5) * 0.3;
       K.w[3 * k] = K.w[3 * k + 1] = K.w[3 * k + 2] = 0; K.shade[k] = rnd();
     }
   };
+  K.nearest = (fx, fy, fz, maxd) => { let b = -1, bd = maxd * maxd; for (let k = 0; k < K.n; k++) { const dx = K.p[3 * k] - fx, dy = K.p[3 * k + 1] - fy, dz = K.p[3 * k + 2] - fz, d = dx * dx + dy * dy + dz * dz; if (d < bd) { bd = d; b = k; } } return b < 0 ? null : { k: b, d: Math.sqrt(bd) }; };
   K.clear = () => { K.n = 0; K.eaten = 0; };
   const rm = (k) => { const l = --K.n; if (k === l) return; for (let c = 0; c < 3; c++) { K.p[3 * k + c] = K.p[3 * l + c]; K.v[3 * k + c] = K.v[3 * l + c]; K.w[3 * k + c] = K.w[3 * l + c]; } for (let c = 0; c < 4; c++) K.q[4 * k + c] = K.q[4 * l + c]; K.shade[k] = K.shade[l]; };
   // triangle grid
@@ -724,7 +768,10 @@ function createKrill(world) {
     for (let s = 0; s < subs; s++) {
       for (let k = 0; k < K.n; k++) {
         const q = K.q, o = 4 * k;
-        K.v[3 * k + 1] -= 9.5 * h;
+        K.v[3 * k + 1] -= 9.5 * h * K.gs;
+        if (K.gs < 0.5) { // floating: hover near the shark's depth and drift a little
+          K.v[3 * k + 1] += (K.level - K.p[3 * k + 1]) * 1.1 * h; K.v[3 * k] += (rnd() - 0.5) * 0.9 * h; K.v[3 * k + 1] += (rnd() - 0.5) * 0.5 * h; K.v[3 * k + 2] += (rnd() - 0.5) * 0.9 * h;
+        }
         // gulp: steer krill in front of the mouth toward it
         if (gulp > 0.01) {
           const dx = mf.f[0] - K.p[3 * k], dy = mf.f[1] - K.p[3 * k + 1], dz = mf.f[2] - K.p[3 * k + 2], dd = Math.hypot(dx, dy, dz);
@@ -734,11 +781,11 @@ function createKrill(world) {
             let tx = dx, ty = dy, tz = dz;
             if (dd < 0.22) { tx += mf.e[0] * 0.12; ty += mf.e[1] * 0.12; tz += mf.e[2] * 0.12; }
             const tl = Math.hypot(tx, ty, tz) + 1e-6, gain = (70 * fall + 14) * gulp * h;
-            K.v[3 * k] += tx / tl * gain; K.v[3 * k + 1] += ty / tl * gain + 9.5 * h * 0.8 * gulp; K.v[3 * k + 2] += tz / tl * gain;
+            K.v[3 * k] += tx / tl * gain; K.v[3 * k + 1] += ty / tl * gain + 9.5 * h * 0.8 * gulp * K.gs; K.v[3 * k + 2] += tz / tl * gain;
             K.v[3 * k] *= 1 - 0.8 * h * gulp; K.v[3 * k + 2] *= 1 - 0.8 * h * gulp;
           }
         }
-        K.v[3 * k] *= 1 - 0.3 * h; K.v[3 * k + 1] *= 1 - 0.3 * h; K.v[3 * k + 2] *= 1 - 0.3 * h; K.w[3 * k] *= 1 - 0.8 * h; K.w[3 * k + 1] *= 1 - 0.8 * h; K.w[3 * k + 2] *= 1 - 0.8 * h;
+        const kd = 1 - (0.3 + K.dr) * h; K.v[3 * k] *= kd; K.v[3 * k + 1] *= kd; K.v[3 * k + 2] *= kd; K.w[3 * k] *= 1 - 0.8 * h; K.w[3 * k + 1] *= 1 - 0.8 * h; K.w[3 * k + 2] *= 1 - 0.8 * h;
         K.p[3 * k] += K.v[3 * k] * h; K.p[3 * k + 1] += K.v[3 * k + 1] * h; K.p[3 * k + 2] += K.v[3 * k + 2] * h;
         const wx = K.w[3 * k], wy = K.w[3 * k + 1], wz = K.w[3 * k + 2], qx = q[o], qy = q[o + 1], qz = q[o + 2], qw = q[o + 3];
         q[o] += 0.5 * h * (wx * qw + wy * qz - wz * qy); q[o + 1] += 0.5 * h * (wy * qw + wz * qx - wx * qz); q[o + 2] += 0.5 * h * (wz * qw + wx * qy - wy * qx); q[o + 3] += 0.5 * h * (-wx * qx - wy * qy - wz * qz);
@@ -1328,7 +1375,9 @@ const WAYS = [
 ];
 
 // ---------------------------------------------------------------- state
-const ST = { way: 0, lu: 0, luT: 0, eyeExt: 1, eyeT: 1, swishT: 0, gulpT: -1, mesh: false, slow: false, pause: false, twist: false, firm: 0.55, damp: 0.35, nsub: 4, cell: 0.05 };
+let huntCool = 0;
+function bodyCentre() { const p = world.pos, n = world.nv; let x = 0, y = 0, z = 0; for (let i = 0; i < n; i++) { x += p[3 * i]; y += p[3 * i + 1]; z += p[3 * i + 2]; } return [x / n, y / n, z / n]; }
+const ST = { way: 0, lu: 0, luT: 0, eyeExt: 1, eyeT: 1, swishT: 0, ocean: false, swim: false, gulpT: -1, mesh: false, slow: false, pause: false, twist: false, firm: 0.55, damp: 0.35, nsub: 4, cell: 0.05 };
 const cam = { yaw: -0.95, pitch: 0.62, dist: 4.7, tx: 1.35, ty: 0.12, tz: 0 };
 const sm = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
@@ -1449,10 +1498,24 @@ function advance(dtReal) {
     ST.gulpT += dt; if (ST.gulpT > 2.5) ST.gulpT = -1;
   }
   S.jaw = jaw; S.flare = flare;
-  S.swish += ((ST.swishT ? 1 : 0) - S.swish) * Math.min(1, dt * 3);
-  if (S.swish > 0.001) S.swishPhase += dt * 2 * Math.PI * 1.3;
+  S.swim += ((ST.swim ? 1 : 0) - S.swim) * Math.min(1, dt * 1.2); S.swimMix = S.swim;
+  S.g += ((ST.ocean ? 0.03 : 1) - S.g) * Math.min(1, dt * 2.5); S.drag += ((ST.ocean ? 0.9 : 0) - S.drag) * Math.min(1, dt * 2.5);
+  S.swish += (((ST.swishT || ST.swim) ? 1 : 0) - S.swish) * Math.min(1, dt * 3);
+  if (S.swish > 0.001) S.swishPhase += dt * 2 * Math.PI * (1.3 - 0.4 * S.swimMix);
   S.firm = ST.firm; S.damp = ST.damp; S.nsub = ST.nsub;
   const t0 = performance.now();
+  // ocean / swim: krill float at the shark's depth; a swimming shark hunts the nearest one and gulps when it is at the mouth
+  krill.gs += ((ST.ocean ? 0.02 : 1) - krill.gs) * Math.min(1, dt * 3); krill.dr = ST.ocean ? 1.1 : 0;
+  if (ST.ocean) krill.level = ST.swim ? S.swimH : bodyCentre()[1];
+  S.hunt = null;
+  if (ST.swim && krill.n) {
+    const mf = world.mouthFrame(), nr = krill.nearest(mf.f[0], mf.f[1], mf.f[2], 3.2);
+    if (nr) {
+      const k = nr.k; S.hunt = [krill.p[3 * k], krill.p[3 * k + 1], krill.p[3 * k + 2]];
+      const out = -((krill.p[3 * k] - mf.f[0]) * mf.e[0] + (krill.p[3 * k + 1] - mf.f[1]) * mf.e[1] + (krill.p[3 * k + 2] - mf.f[2]) * mf.e[2]);
+      huntCool -= dt; if (ST.gulpT < 0 && nr.d < 0.95 && out > 0.02 && huntCool <= 0) { ST.gulpT = 0; huntCool = 1.0; }
+    }
+  }
   world.step(dt);
   krill.step(dt, steer);
   simMs = simMs * 0.9 + (performance.now() - t0) * 0.1;
@@ -1583,22 +1646,24 @@ function resize() {
 const A = {
   gulp() { if (ST.gulpT < 0 || ST.gulpT > 1.5) ST.gulpT = 0; if (ST.pause) { ST.pause = false; $('cPause').checked = false; } },
   swish() { ST.swishT = ST.swishT ? 0 : 1; sync(); },
+  ocean() { ST.ocean = !ST.ocean; if (ST.ocean) for (let i = 0; i < world.nv; i++) world.vel[3 * i + 1] += 0.45; else ST.swim = false; sync(); },
+  swim() { ST.swim = !ST.swim; if (ST.swim && !ST.ocean) { ST.ocean = true; for (let i = 0; i < world.nv; i++) world.vel[3 * i + 1] += 0.45; } sync(); },
   eyes() { ST.eyeT = ST.eyeT ? 0 : 1; sync(); },
   light() { ST.luT = ST.luT ? 0 : 1; sync(); },
-  krill() { krill.spawn(110); },
-  reset() { world.reset(); krill.clear(); ST.gulpT = -1; ST.swishT = 0; ST.eyeT = 1; ST.luT = 0; uploadDynamic(); sync(); },
+  krill() { if (ST.ocean) { const c = bodyCentre(); krill.spawn(110, c); } else krill.spawn(110); },
+  reset() { world.reset(); krill.clear(); ST.gulpT = -1; ST.swishT = 0; ST.ocean = false; ST.swim = false; ST.eyeT = 1; ST.luT = 0; uploadDynamic(); sync(); },
   way(i) { ST.way = i; sync(); },
 };
 function sync() {
   $('bSwish').setAttribute('aria-pressed', !!ST.swishT); $('bEyes').setAttribute('aria-pressed', !ST.eyeT); $('bEyes').textContent = ST.eyeT ? 'Tuck the eyes' : 'Release the eyes';
-  $('bLight').setAttribute('aria-pressed', !!ST.luT);
+  $('bLight').setAttribute('aria-pressed', !!ST.luT); $('bOcean').setAttribute('aria-pressed', !!ST.ocean); $('bSwim').setAttribute('aria-pressed', !!ST.swim);
   document.querySelectorAll('.way').forEach((b, i) => b.setAttribute('aria-pressed', i === ST.way));
   if (xrS) xrS.dirty = true;
 }
 function initUI() {
   const ways = $('ways');
   WAYS.forEach((w, i) => { const b = document.createElement('button'); b.className = 'way'; b.innerHTML = `<i style="background:${w.sw}"></i>${w.name}`; b.onclick = () => A.way(i); ways.appendChild(b); });
-  $('bGulp').onclick = A.gulp; $('bSwish').onclick = A.swish; $('bEyes').onclick = A.eyes; $('bLight').onclick = A.light; $('bKrill').onclick = A.krill; $('bReset').onclick = A.reset;
+  $('bGulp').onclick = A.gulp; $('bSwish').onclick = A.swish; $('bOcean').onclick = A.ocean; $('bSwim').onclick = A.swim; $('bEyes').onclick = A.eyes; $('bLight').onclick = A.light; $('bKrill').onclick = A.krill; $('bReset').onclick = A.reset;
   $('sFirm').oninput = e => { ST.firm = e.target.value / 100; $('oFirm').textContent = e.target.value; if (xrS) xrS.dirty = true; };
   $('sDamp').oninput = e => { ST.damp = e.target.value / 100; $('oDamp').textContent = e.target.value; if (xrS) xrS.dirty = true; };
   $('cSlow').onchange = e => { ST.slow = e.target.checked; if (xrS) xrS.dirty = true; };
@@ -1648,7 +1713,7 @@ function bindPointer() {
 // ---------------------------------------------------------------- WebXR (WebGPU binding): VR + AR placement + floating menu + hand pinch
 let xrS = null, panelRes = null; const xrErrs = []; let fmt0 = null;
 function setFmt(f) { for (const v of vrs) if (v) destroyVR(v); vrs = []; fmt = f; initPipelines(); panelRes = null; resize(); }
-const PNW = 640, PNH = 1040;
+const PNW = 640, PNH = 1130, PIW = 720, PIH = 380;
 const stepItem = (label, y, get, set, extra = {}) => Object.assign({ kind: 'stepper', label, x: 28, y, w: 584, h: 70, get, set }, extra);
 const sizeItem = y => stepItem('Size', y, () => (xrS.pl.scale - 0.06) / 0.24, v => { xrS.pl.scale = 0.06 + v * 0.24; applyPlace(xrS.pl); });
 const turnItem = y => stepItem('Turn', y, () => (((xrS.pl.yaw / (2 * Math.PI)) % 1) + 1) % 1, v => { xrS.pl.yaw = v * 2 * Math.PI; applyPlace(xrS.pl); }, { step: 1 / 12, wrap: true });
@@ -1657,14 +1722,14 @@ const VR_ITEMS = (() => {
   const it = [];
   const add = (kind, label, x, w, h, extra = {}) => it.push(Object.assign({ kind, label, x, y: 0, w, h }, extra));
   WAYS.forEach((w, i) => add('way', w.name, 28 + i * 150, 140, 64, { i, y: 82 }));
-  const rows = [['Gulp', A.gulp, null], ['Swish tail', A.swish, () => ST.swishT], ['Tuck the eyes', A.eyes, () => !ST.eyeT], ['Light up', A.light, () => ST.luT], ['Scatter krill', A.krill, null], ['Reset', A.reset, null]];
+  const rows = [['Gulp', A.gulp, null], ['Swish tail', A.swish, () => ST.swishT], ['Tuck the eyes', A.eyes, () => !ST.eyeT], ['Light up', A.light, () => ST.luT], ['Ocean gravity', A.ocean, () => ST.ocean], ['Swim', A.swim, () => ST.swim], ['Scatter krill', A.krill, null], ['Reset', A.reset, null]];
   rows.forEach((r, i) => { const col = i % 2, row = (i / 2) | 0; add('btn', r[0], 28 + col * 300, 284, 74, { y: 170 + row * 86, fn: r[1], on: r[2] }); });
-  add('stepper', 'Firmness', 28, 584, 70, { y: 440, get: () => ST.firm, set: v => { ST.firm = v; $('sFirm').value = v * 100; $('oFirm').textContent = Math.round(v * 100); } });
-  add('stepper', 'Damping', 28, 584, 70, { y: 520, get: () => ST.damp, set: v => { ST.damp = v; $('sDamp').value = v * 100; $('oDamp').textContent = Math.round(v * 100); } });
-  [['¼ speed', 'slow', 'cSlow'], ['Show mesh', 'mesh', 'cMesh'], ['Pause', 'pause', 'cPause']].forEach((t, i) => add('btn', t[0], 28 + i * 200, 190, 66, { y: 610, on: () => ST[t[1]], fn: () => { ST[t[1]] = !ST[t[1]]; $(t[2]).checked = ST[t[1]]; } }));
-  it.push(sizeItem(700), turnItem(780));
-  add('btn', 'Move shark', 28, 284, 74, { y: 880, only: 'ar', fn: () => setMode('place') });
-  it.push(exitBtn('Exit AR', 328, 284, 880, 'ar'), exitBtn('Exit VR', 28, 584, 880, 'vr'));
+  add('stepper', 'Firmness', 28, 584, 70, { y: 526, get: () => ST.firm, set: v => { ST.firm = v; $('sFirm').value = v * 100; $('oFirm').textContent = Math.round(v * 100); } });
+  add('stepper', 'Damping', 28, 584, 70, { y: 606, get: () => ST.damp, set: v => { ST.damp = v; $('sDamp').value = v * 100; $('oDamp').textContent = Math.round(v * 100); } });
+  [['¼ speed', 'slow', 'cSlow'], ['Show mesh', 'mesh', 'cMesh'], ['Pause', 'pause', 'cPause']].forEach((t, i) => add('btn', t[0], 28 + i * 200, 190, 66, { y: 696, on: () => ST[t[1]], fn: () => { ST[t[1]] = !ST[t[1]]; $(t[2]).checked = ST[t[1]]; } }));
+  it.push(sizeItem(786), turnItem(866));
+  add('btn', 'Move shark', 28, 284, 74, { y: 966, only: 'ar', fn: () => setMode('place') });
+  it.push(exitBtn('Exit AR', 328, 284, 966, 'ar'), exitBtn('Exit VR', 28, 584, 966, 'vr'));
   return it;
 })();
 const PLACE_ITEMS = [sizeItem(330), turnItem(410), exitBtn('Exit AR', 28, 584, 500, null)];
@@ -1685,12 +1750,9 @@ function drawPanel(hover) {
     g2.fillStyle = s.ret.ok ? w.accent : mute; g2.beginPath(); g2.arc(600, 138, 12, 0, 7); g2.fill();
     g2.fillStyle = mute; g2.font = '500 24px system-ui';
     ['Point at a table or the floor.', s.noHT ? 'No hit-test here: it lands on the floor in front of you.' : 'The shark follows your pointer.', 'Pinch (or squeeze the trigger) to place it.', 'Then the board stays at its side.'].forEach((t, i) => g2.fillText(t, 28, 200 + i * 34));
-  } else {
-    const ro = `${(world.totalMassG + krill.eaten * 0.05).toFixed(0)} g   ·   ${(volCache * 100).toFixed(0)} %   ·   gape ${world.gapeMM().toFixed(1)} mm   ·   krill ${krill.eaten}`;
-    g2.fillText(ro, 28, 1006);
   }
   g2.font = '500 15px system-ui'; g2.fillStyle = xrErrs.length ? '#c0392b' : mute;
-  g2.fillText((place ? s.diag : s.diag + ' · ' + s.frames + 'f') + (xrErrs.length ? ' · ' + xrErrs[xrErrs.length - 1] : ''), 28, place ? 584 : 1030, 584);
+  g2.fillText((place ? s.diag : s.diag + ' · ' + s.frames + 'f') + (xrErrs.length ? ' · ' + xrErrs[xrErrs.length - 1] : ''), 28, place ? 584 : PNH - 16, 584);
   s.items.forEach((it, idx) => {
     const hov = hover === idx; g2.lineWidth = 3;
     if (it.kind === 'way') { g2.fillStyle = WAYS[it.i].sw; g2.strokeStyle = ST.way === it.i ? ink : 'rgba(0,0,0,0)'; g2.beginPath(); g2.roundRect(it.x, it.y, it.w, it.h, 18); g2.fill(); g2.stroke(); g2.fillStyle = '#fff'; g2.font = '700 22px system-ui'; g2.textAlign = 'center'; g2.fillText(it.label, it.x + it.w / 2, it.y + 40); g2.textAlign = 'left'; if (hov) { g2.strokeStyle = '#fff'; g2.strokeRect(it.x, it.y, it.w, it.h); } return; }
@@ -1705,6 +1767,27 @@ function drawPanel(hover) {
     }
   });
   device.queue.copyExternalImageToTexture({ source: c }, { texture: panelRes.tex }, [PNW, PNH]);
+}
+function wrapText(g2, text, x, y, maxW, lh) { let line = ''; for (const wd of text.split(' ')) { const t = line ? line + ' ' + wd : wd; if (g2.measureText(t).width > maxW && line) { g2.fillText(line, x, y); y += lh; line = wd; } else line = t; } g2.fillText(line, x, y); return y; }
+function drawInfo() { // second floating board: the readouts and notes from the page's top and bottom bars
+  const s = xrS, g2 = panelRes.cvI.getContext('2d'), w = WAYS[ST.way], dk = ST.lu > 0.5;
+  g2.clearRect(0, 0, PIW, PIH);
+  g2.fillStyle = dk ? 'rgba(18,22,28,0.94)' : 'rgba(244,243,238,0.95)'; g2.beginPath(); g2.roundRect(0, 0, PIW, PIH, 34); g2.fill();
+  const ink = dk ? '#e9eef0' : '#14212b', mute = dk ? '#8fa1ab' : '#5b6b75';
+  g2.fillStyle = ink; g2.font = 'italic 46px Georgia, serif'; g2.fillText('Whale Shark Jelly.', 30, 58);
+  g2.font = '600 17px system-ui, sans-serif'; g2.fillStyle = mute; g2.fillText('MATERIAL STUDIES  ·  SOFT-BODY STUDY', 32, 86);
+  const stats = [[(world.totalMassG + krill.eaten * 0.05).toFixed(0), 'MASS  g'], [(volCache * 100).toFixed(0), 'VOLUME  %'], [world.gapeMM().toFixed(1), 'GAPE  mm'], [String(krill.eaten), 'KRILL']];
+  stats.forEach((st, i) => { const x = 30 + i * 172; g2.fillStyle = w.accent; g2.font = '600 50px system-ui'; g2.fillText(st[0], x, 168); g2.fillStyle = mute; g2.font = '600 16px system-ui'; g2.fillText(st[1], x, 194); });
+  g2.fillStyle = dk ? '#2b3540' : '#d9dcd8'; g2.fillRect(30, 214, PIW - 60, 2);
+  g2.fillStyle = ink; g2.font = '500 22px system-ui';
+  wrapText(g2, s.mode === 'place' ? 'Point at a table or the floor, then pinch to place the shark.' : 'Pinch the jelly to pull it. Use both hands at once, or touch it with a finger, the palm or your whole hand. Ocean gravity floats it; Swim makes it circle where you let go.', 30, 250, PIW - 60, 30);
+  g2.font = '500 15px system-ui'; g2.fillStyle = xrErrs.length ? '#c0392b' : mute; g2.fillText($('verTag').textContent + (xrErrs.length ? '  ·  ' + xrErrs[xrErrs.length - 1] : ''), 30, PIH - 20, PIW - 60);
+  device.queue.copyExternalImageToTexture({ source: panelRes.cvI }, { texture: panelRes.texI }, [PIW, PIH]);
+}
+function infoPose(s, eye) { // opposite side of the shark from the menu board, a bit higher, always facing the viewer
+  const pos = s.pl.pos, hw = 0.17, hh = hw * PIH / PIW; let dx = pos[0] - eye[0], dz = pos[2] - eye[2]; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+  const off = 0.2 + 1.9 * s.pl.scale, c = [pos[0] + dz * off - dx * 0.08, pos[1] + hh + 0.1, pos[2] - dx * off - dz * 0.08];
+  const n = nrm([eye[0] - c[0], 0, eye[2] - c[2]]); s.infoP = { c, r: [n[2], 0, -n[0]], hw, hh };
 }
 let ptrHoverSide = 0;
 async function setupXR() {
@@ -1794,7 +1877,11 @@ async function enterXR(ar) {
       const pRing = mk('vsRing', 'fsRing', 'triangle-list', true), pArrow = mk('vsArrow', 'fsRing', 'triangle-list', true);
       const ubs = [0, 1].map(() => device.createBuffer({ size: 256, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST })); // one per eye: queue.writeBuffer lands before the submit, so a shared buffer would give both eyes the last matrix
       const bgs = ubs.map(ub => device.createBindGroup({ layout: bl, entries: [{ binding: 0, resource: { buffer: ub } }, { binding: 1, resource: tex.createView() }, { binding: 2, resource: sampler }] }));
-      panelRes = { cv, tex, pPanel, pLaser, pRing, pArrow, ubs, bgs, data: new Float32Array(48) };
+      const cvI = document.createElement('canvas'); cvI.width = PIW; cvI.height = PIH;
+      const texI = device.createTexture({ size: [PIW, PIH], format: 'rgba8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT });
+      const ubsI = [0, 1].map(() => device.createBuffer({ size: 256, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }));
+      const bgsI = ubsI.map(ub => device.createBindGroup({ layout: bl, entries: [{ binding: 0, resource: { buffer: ub } }, { binding: 1, resource: texI.createView() }, { binding: 2, resource: sampler }] }));
+      panelRes = { cv, tex, pPanel, pLaser, pRing, pArrow, ubs, bgs, data: new Float32Array(48), cvI, texI, ubsI, bgsI, dataI: new Float32Array(48) };
     }
     xrS = { session, binding, layer, br, xm: mode, ref, ar, dirty: true, hover: -1, grabs: new Map(), pgrab: null, hprev: new Map(), panelPose: null, last: 0, mode: 'play', items: [], hts: new Map(), viewerHT: null, noHT: false, ret: { ok: false, t: 0, pos: [0, 0, -0.7] }, pl: { pos: [0, ar ? 0 : 0.82, -0.7], yaw: 0, scale: ar ? 0.16 : 0.14 }, yawSet: !ar, pinch: new Set(), frames: 0, diag: `${document.getElementById('verTag').textContent.replace('Build ','')} ${ar ? 'AR' : 'VR'} ${mode} blend:${session.environmentBlendMode || '?'} fmt:${fmt}${br ? ' fbL:' + br.layer.framebufferWidth + 'x' + br.layer.framebufferHeight : ''}` };
     setMode(ar ? 'place' : 'play'); applyPlace(xrS.pl);
@@ -1988,7 +2075,7 @@ function xrFrameInner(t, frame, s) {
   }
   if (!XR_MI) XR_MI = M4.inv(XR_M);
   if (hover !== s.hover || s.dirty || frameN % 12 === 0) { s.hover = hover; s.dirty = false; drawPanel(hover); }
-  buildHandColliders(frame, s);
+  buildHandColliders(frame, s); infoPose(s, eye); if (frameN % 12 === 0) drawInfo();
   // hand markers: pinch dots in AR (real hands are visible), full joints in VR
   xiN = 0;
   for (const src of s.session.inputSources) {
@@ -2026,6 +2113,8 @@ function xrFrameInner(t, frame, s) {
     if (ringOn) { p.setPipeline(panelRes.pRing); p.draw(384, 2); p.setPipeline(panelRes.pArrow); p.draw(3); }
     p.setPipeline(panelRes.pPanel); p.draw(6);
     if (laser) { p.setPipeline(panelRes.pLaser); p.draw(2); }
+    { const I = s.infoP, dI = panelRes.dataI; dI.set(d); dI.set([I.c[0], I.c[1], I.c[2], 0], 16); dI.set([I.r[0] * I.hw, I.r[1] * I.hw, I.r[2] * I.hw, 0], 20); dI.set([0, I.hh, 0, 0], 24);
+      device.queue.writeBuffer(panelRes.ubsI[vi & 1], 0, dI); p.setBindGroup(0, panelRes.bgsI[vi & 1]); p.setPipeline(panelRes.pPanel); p.draw(6); }
     p.end();
     if (bridge) enc.copyTextureToTexture({ texture: vr.eye }, { texture: s.br.curTex, origin: [vp.x, vp.y] }, [vp.width, vp.height]);
   }
