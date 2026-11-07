@@ -1709,6 +1709,11 @@ function bridgeEnd(br) { // copy the WebGPU result into the XR framebuffer
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, br.cv);
   gl.useProgram(br.pg); gl.uniform1i(gl.getUniformLocation(br.pg, 'T'), 0); gl.uniform2f(gl.getUniformLocation(br.pg, 'S'), br.fw, br.fh);
   gl.bindVertexArray(br.vao); gl.drawArrays(gl.TRIANGLES, 0, 3);
+  const ge = gl.getError(); if (ge) { xrErrs.push('GL error ' + ge); if (xrErrs.length > 3) xrErrs.shift(); }
+  // status squares (bottom of each eye): green = copy path alive, red = an error was seen
+  gl.enable(gl.SCISSOR_TEST); const bad = xrErrs.length > 0; gl.clearColor(bad ? 0.9 : 0.1, bad ? 0.1 : 0.9, 0.1, 1);
+  for (const x0 of [br.fw * 0.25 - 20, br.fw * 0.75 - 20]) { gl.scissor(x0, 12, 40, 14); gl.clear(gl.COLOR_BUFFER_BIT); }
+  gl.disable(gl.SCISSOR_TEST);
 }
 // per-view target: viewport (WebGPU, top-left origin) + colour view
 function xrSub(s, view) {
@@ -1854,7 +1859,7 @@ function xrFrame(t, frame) {
   catch (e) {
     console.error('xrFrame', e); xrErrs.push(String(e && e.message || e).slice(0, 110)); if (xrErrs.length > 3) xrErrs.shift(); s.dirty = true;
     try { // keep the room visible: clear the layer to transparent
-      if (s.xm === 'bridge') { const gl = s.br.gl; gl.bindFramebuffer(gl.FRAMEBUFFER, s.layer.framebuffer); gl.clearColor(0, 0, 0, s.ar ? 0 : 1); gl.clear(gl.COLOR_BUFFER_BIT); return; }
+      if (s.xm === 'bridge') { const gl = s.br.gl; gl.bindFramebuffer(gl.FRAMEBUFFER, s.layer.framebuffer); gl.clearColor(0.35, 0, 0.35, 0.35); gl.clear(gl.COLOR_BUFFER_BIT); return; }
       const pose = frame.getViewerPose(s.ref); if (!pose) return; const enc = device.createCommandEncoder();
       for (const view of pose.views) { const sub = xrSub(s, view); enc.beginRenderPass({ colorAttachments: [{ view: sub.cv, clearValue: { r: 0, g: 0, b: 0, a: s.ar ? 0 : 1 }, loadOp: 'clear', storeOp: 'store' }] }).end(); }
       device.queue.submit([enc.finish()]);
