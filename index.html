@@ -172,7 +172,7 @@ body.ph #ph{display:block}
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v30 - 11-09_16:40Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v31 - 11-09_16:54Z</p>
   <p class="vrnote" style="opacity:.6;font-size:11px;margin-top:2px">Body shape based on "Model 99A - Whale Shark" by DigitalLife3D (CC BY-NC 4.0)</p>
  </aside>
 </div>
@@ -1432,7 +1432,7 @@ function createJellies(world) {
   }
   function sub(b, dt, act, hc, centre, ub) {
     const p = b.p, q = b.q, v = b.v, ig = act > 0.02;
-    const [R, U, F] = ub, Fm = J.firm, kg = 0.003 + 0.032 * Fm * Fm + 0.2 * act * act, ks = 0.25 + 0.75 * Fm, c = b.c, grav = 9.0 * (1 - 0.94 * act);
+    const [R, U, F] = ub, Fm = J.firm, kg = 0.003 + 0.032 * Fm * Fm + 0.2 * act * act, ks = 0.25 + 0.75 * Fm, c = b.c, grav = 9.0 * (1 - 0.985 * act);
     // integrate
     for (let i = 0; i < NV * 3; i += 3) {
       q[i] = p[i]; q[i + 1] = p[i + 1]; q[i + 2] = p[i + 2];
@@ -1639,6 +1639,8 @@ struct G {
 @group(0) @binding(3) var samp: sampler;
 @group(0) @binding(4) var shF: texture_depth_2d;
 @group(0) @binding(5) var shB: texture_depth_2d;
+@group(0) @binding(6) var cauTex: texture_2d<f32>;
+@group(0) @binding(7) var cauSamp: sampler;
 
 const LB: f32 = 3.0;
 const PI: f32 = 3.14159265;
@@ -1646,28 +1648,13 @@ const PI: f32 = 3.14159265;
 fn lu() -> f32 { return g.camFwd.w; }
 fn keyK() -> f32 { return mix(1.0, 0.14, g.camFwd.w); }
 // underwater caustics: sunlight focused by a moving wavy surface, projected along the light onto everything
-fn causAt(q: vec2<f32>, t: f32) -> f32 {
-  let p = q - vec2<f32>(250.0);
-  var i = p;
-  var c = 1.0;
-  let inten = 0.005;
-  for (var n = 0; n < 4; n = n + 1) {
-    let tt = t * (1.0 - 3.5 / f32(n + 1));
-    i = p + vec2<f32>(cos(tt - i.x) + sin(tt + i.y), sin(tt - i.y) + cos(tt + i.x));
-    c = c + 1.0 / length(vec2<f32>(p.x / (sin(i.x + tt) / inten), p.y / (cos(i.y + tt) / inten)));
-  }
-  c = c / 4.0;
-  c = 1.17 - pow(c, 1.4);
-  return pow(abs(c), 8.0);
-}
 fn caus(P: vec3<f32>) -> f32 {
   let K = g.pale.w;
   if (K < 0.001) { return 0.0; }
   let L = normalize(g.lightDir.xyz);
   let q = P.xz - L.xz * (P.y / max(L.y, 0.3));
-  let t = g.cam.w * 0.45;
-  let a = causAt(q * 2.6, t);
-  let b = causAt(q * 1.7 + vec2<f32>(3.1, 1.7), t * 0.8 + 11.0);
+  let a = textureSampleLevel(cauTex, cauSamp, q * (2.6 / 6.2831853), 0.0).r;
+  let b = textureSampleLevel(cauTex, cauSamp, q * (1.7 / 6.2831853) + vec2<f32>(0.49, 0.27), 0.0).g;
   return clamp(a * 0.65 + b * 0.5, 0.0, 1.6) * K;
 }
 
@@ -1790,8 +1777,8 @@ struct FloorOut { @location(0) col: vec4<f32>, @builtin(frag_depth) depth: f32 }
   if (!AR && g.tint.w > 0.001) { // optional underwater backdrop: a faint blue that deepens upward and with distance
     let dist = select(1.0, clamp(length((g.cam.xyz + rd * (-g.cam.y / min(rd.y, -0.0005))).xz - vec2<f32>(1.5, 0.0)) / 6.0, 0.0, 1.0), rd.y < -0.0005);
     let up = clamp(rd.y * 1.6 + 0.35, 0.0, 1.0);
-    let deep = mix(vec3<f32>(0.80, 0.90, 1.0), vec3<f32>(0.62, 0.80, 0.98), max(up, dist));
-    col = mix(col, col * deep, g.tint.w * 0.85);
+    let deep = mix(vec3<f32>(0.70, 0.85, 1.0), vec3<f32>(0.46, 0.68, 0.92), max(up, dist));
+    col = mix(col, col * deep, g.tint.w);
   }
   o.col = vec4<f32>(col, alpha);
   return o;
@@ -2270,6 +2257,26 @@ const WAYS = [
 
 // ---------------------------------------------------------------- state
 let huntCool = 0, jfGid = 0;
+const CAU_N = 256, cau = { last: -1 };
+const CAU_WGSL = `
+@group(0) @binding(0) var<uniform> cu: vec4<f32>;
+struct O { @builtin(position) p: vec4<f32>, @location(0) uv: vec2<f32> };
+@vertex fn vs(@builtin(vertex_index) i: u32) -> O { var o: O; let x = f32((i << 1u) & 2u); let y = f32(i & 2u); o.p = vec4<f32>(x * 2.0 - 1.0, 1.0 - y * 2.0, 0.0, 1.0); o.uv = vec2<f32>(x, y); return o; }
+fn ca(q: vec2<f32>, t: f32) -> f32 {
+  let p = q - vec2<f32>(250.0);
+  var i = p; var c = 1.0; let inten = 0.005;
+  for (var n = 0; n < 4; n = n + 1) {
+    let tt = t * (1.0 - 3.5 / f32(n + 1));
+    i = p + vec2<f32>(cos(tt - i.x) + sin(tt + i.y), sin(tt - i.y) + cos(tt + i.x));
+    c = c + 1.0 / length(vec2<f32>(p.x / (sin(i.x + tt) / inten), p.y / (cos(i.y + tt) / inten)));
+  }
+  c = c / 4.0; c = 1.17 - pow(c, 1.4);
+  return pow(abs(c), 8.0);
+}
+@fragment fn fs(o: O) -> @location(0) vec4<f32> {
+  let q = o.uv * 6.2831853;   // the pattern repeats every 2*pi, so the texture tiles seamlessly
+  return vec4<f32>(clamp(ca(q, cu.x), 0.0, 1.0), clamp(ca(q, cu.x * 0.8 + 11.0), 0.0, 1.0), 0.0, 1.0);
+}`;
 // "follow my food": one big krill the shark chases; grab it and lead the shark around, it respawns when eaten
 const LURE_K = 7, lure = { p: [2, 0.8, 0.5], v: [0, 0, 0], grab: false, t: 0, s: 0, id: 0, act: false, wait: 1.2 }, LI = new Float32Array(12);
 function lureSpawn() {
@@ -2318,7 +2325,17 @@ function initPipelines() {
     { binding: 2, visibility: F, texture: { sampleType: 'unfilterable-float' } },
     { binding: 3, visibility: F, sampler: { type: 'filtering' } },
     { binding: 4, visibility: F, texture: { sampleType: 'depth' } },
-    { binding: 5, visibility: F, texture: { sampleType: 'depth' } }] });
+    { binding: 5, visibility: F, texture: { sampleType: 'depth' } },
+    { binding: 6, visibility: V | F, texture: { sampleType: 'float' } },
+    { binding: 7, visibility: V | F, sampler: { type: 'filtering' } }] });
+  // caustics are computed once per frame into a small tileable texture, then just sampled everywhere
+  cau.tex = device.createTexture({ size: [CAU_N, CAU_N], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
+  cau.view = cau.tex.createView();
+  cau.samp = device.createSampler({ magFilter: 'linear', minFilter: 'linear', addressModeU: 'repeat', addressModeV: 'repeat' });
+  cau.ub = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  { const cm = device.createShaderModule({ code: CAU_WGSL }), cl = device.createBindGroupLayout({ entries: [{ binding: 0, visibility: F, buffer: { type: 'uniform' } }] });
+    cau.pipe = device.createRenderPipeline({ layout: device.createPipelineLayout({ bindGroupLayouts: [cl] }), vertex: { module: cm, entryPoint: 'vs' }, fragment: { module: cm, entryPoint: 'fs', targets: [{ format: 'rgba8unorm' }] }, primitive: { topology: 'triangle-list' } });
+    cau.bg = device.createBindGroup({ layout: cl, entries: [{ binding: 0, resource: { buffer: cau.ub } }] }); }
   sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
   const T = (w, h, format, usage) => device.createTexture({ size: [w, h], format, usage });
   const RB = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING;
@@ -2371,7 +2388,7 @@ function makeVR(w, h) {
   vr.sceneD = device.createTexture({ size: [w, h], format: 'depth32float', usage: RA });
   vr.backD = device.createTexture({ size: [w, h], format: 'depth32float', usage: RA });
   vr.sceneV = vr.scene.createView(); vr.backV = vr.back.createView(); vr.sceneDV = vr.sceneD.createView(); vr.backDV = vr.backD.createView();
-  const bg = (s, b, f, k) => device.createBindGroup({ layout: bgl, entries: [{ binding: 0, resource: { buffer: vr.gBuf } }, { binding: 1, resource: s }, { binding: 2, resource: b }, { binding: 3, resource: sampler }, { binding: 4, resource: f }, { binding: 5, resource: k }] });
+  const bg = (s, b, f, k) => device.createBindGroup({ layout: bgl, entries: [{ binding: 0, resource: { buffer: vr.gBuf } }, { binding: 1, resource: s }, { binding: 2, resource: b }, { binding: 3, resource: sampler }, { binding: 4, resource: f }, { binding: 5, resource: k }, { binding: 6, resource: cau.view }, { binding: 7, resource: cau.samp }] });
   vr.bgShadow = bg(dummy.sceneV, dummy.backV, dummy.depthV, dummy.depthV);
   vr.bgScene = bg(dummy.sceneV, dummy.backV, shFv, shBv);
   vr.bgBack = bg(dummy.sceneV, dummy.backV, shFv, shBv);
@@ -2514,6 +2531,8 @@ function encodeShadows(enc, vr) {
 }
 function encodeView(enc, vr, colorView, nInst, viewport) {
   const bg = lin(bgNow());
+  { const tn = performance.now(); if (ST.cauK > 0.001 && tn - cau.last > 8) { cau.last = tn; device.queue.writeBuffer(cau.ub, 0, new Float32Array([tn / 1000 * 0.45, 0, 0, 0]));
+    const cp = enc.beginRenderPass({ colorAttachments: [{ view: cau.view, clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: 'clear', storeOp: 'store' }] }); cp.setPipeline(cau.pipe); cp.setBindGroup(0, cau.bg); cp.draw(3); cp.end(); } }
   let p = enc.beginRenderPass({ colorAttachments: [{ view: vr.sceneV, clearValue: { r: bg[0], g: bg[1], b: bg[2], a: ((xrS && xrS.ar) || PHN.on) ? 0 : 1 }, loadOp: 'clear', storeOp: 'store' }], depthStencilAttachment: { view: vr.sceneDV, depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' } });
   p.setBindGroup(0, vr.bgScene);
   if (!DBG.has('nofloor')) { p.setPipeline(pipes.floor); p.draw(3); }
