@@ -168,7 +168,7 @@ body.ph #ph{display:block}
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v17 - 11-09_01:09Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v18 - 11-09_01:16Z</p>
  </aside>
 </div>
 
@@ -194,7 +194,7 @@ let H = 0.04, YM = 0.10;
 const LB = 3.0, G_ACC = 14.0, FLOOR_MU = 0.35;
 const MOUTH = { c: [0.02, 0.10, 0.0], r: [0.26, 0.03, 0.25] };
 const PROFILE = [
-  [0.000, 0.230, 0.130], [0.047, 0.330, 0.230], [0.093, 0.360, 0.310], [0.137, 0.370, 0.380],
+  [0.000, 0.240, 0.270], [0.047, 0.330, 0.320], [0.093, 0.360, 0.360], [0.137, 0.370, 0.400],
   [0.183, 0.375, 0.450], [0.227, 0.375, 0.480], [0.273, 0.370, 0.500], [0.370, 0.330, 0.470],
   [0.457, 0.250, 0.430], [0.547, 0.210, 0.370], [0.637, 0.170, 0.310], [0.727, 0.145, 0.260],
   [0.817, 0.120, 0.170], [0.907, 0.090, 0.110], [1.000, 0.055, 0.070]];
@@ -291,9 +291,9 @@ function sdfRender(a, y, z) {
   let d = bodySdf(a, y, z), df = 1e9;
   for (let i = 0; i < FINS.length; i++) { const v = finSdf(FINS[i], a, y, z, 0.55, 0.0125); if (v < df) df = v; }
   d = smin(d, df, 0.03);
-  const u = (a - MOUTH.c[0]) / MOUTH.r[0], w = z / MOUTH.r[2];
-  const dm = smax((Math.hypot(u, w) - 1) * 0.16, Math.abs(y - YM) - 0.5 * H, 0.012);
-  d = smax(d, -dm, 0.006);
+  const uz = z / 0.27;
+  const dm = smax(a - 0.10 * Math.sqrt(Math.max(0, 1 - uz * uz)) - 0.01, Math.abs(y - YM) - 0.011, 0.012);
+  d = smax(d, -dm, 0.008);
   return Math.max(d, -y);
 }
 function sdfCore(a, y, z) { // inner milky gel core (belly side), body only
@@ -1574,7 +1574,7 @@ fn markings(p0: vec3<f32>, finw: f32, nrm: vec3<f32>, pf: f32) -> Mk {
   let rr = 0.0052 * (0.7 + 0.6 * hsh(vec2<f32>(col, row)));
   let small = aa(dd, rr, pf);
   let denseMask = max((1.0 - smoothstep(0.50, 0.72, a)) * bodyW, finw * 0.95) * (1.0 - smoothstep(1.9, 2.3, ath) * (1.0 - finw));
-  let dense = small * denseMask;
+  let dense = small * denseMask * mix(smoothstep(0.03, 0.09, a), 1.0, finw);
   let denseHalo = exp(-(dd / (rr * 2.6)) * (dd / (rr * 2.6))) * denseMask;
 
   m.pale = max(max(spots, hoops), max(ridgeLine, dense * 0.92));
