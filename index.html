@@ -169,7 +169,7 @@ body.ph #ph{display:block}
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v24 - 11-09_02:01Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v25 - 11-09_02:08Z</p>
   <p class="vrnote" style="opacity:.6;font-size:11px;margin-top:2px">Body shape based on "Model 99A - Whale Shark" by DigitalLife3D (CC BY-NC 4.0)</p>
  </aside>
 </div>
@@ -2040,7 +2040,7 @@ const XI = new Float32Array(64 * 12); let xiN = 0;
 function updateInstances() {
   const n = krill.fillInstances(), I = krill.inst;
   for (let e = 0; e < 2; e++) {
-    const v = world.eyeV[e], o = (n + e) * 12, k = -0.042 + 0.046 * ST.eyeExt;
+    const v = world.eyeV[e], o = (n + e) * 12, k = -0.058 + 0.046 * ST.eyeExt;
     I[o] = world.pos[3 * v] + world.nrm[3 * v] * k; I[o + 1] = world.pos[3 * v + 1] + world.nrm[3 * v + 1] * k; I[o + 2] = world.pos[3 * v + 2] + world.nrm[3 * v + 2] * k; I[o + 3] = 1;
     I[o + 4] = 0; I[o + 5] = 0; I[o + 6] = 0; I[o + 7] = 1; I[o + 8] = I[o + 9] = I[o + 10] = 0.019; I[o + 11] = 0;
   }
