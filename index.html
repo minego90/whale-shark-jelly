@@ -170,7 +170,7 @@ body.ph #ph{display:block}
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v27 - 11-09_02:48Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v28 - 11-09_03:15Z</p>
   <p class="vrnote" style="opacity:.6;font-size:11px;margin-top:2px">Body shape based on "Model 99A - Whale Shark" by DigitalLife3D (CC BY-NC 4.0)</p>
  </aside>
 </div>
@@ -683,19 +683,20 @@ function createWorld(cell) {
   // whole-body swimming envelope: amplitude grows smoothly from head to tail but is never zero
   const tenvS = new Float32Array(nt); for (let t = 0; t < nt; t++) { const u = Math.max(0, Math.min(1, L.tcen[3 * t] / LB)); tenvS[t] = 0.16 + 0.84 * Math.pow(u, 1.7); }
   const headIdx = [], tailIdx = []; for (let v = 0; v < nv; v++) { const x = L.rest[3 * v]; if (x < 0.4) headIdx.push(v); else if (x > LB - 0.55) tailIdx.push(v); }
-  const dorsIdx = [], ventIdx = []; for (let v = 0; v < nv; v++) { const x = L.rest[3 * v], y = L.rest[3 * v + 1]; if (x > 0.4 && x < 1.7) { if (y > 0.2) dorsIdx.push(v); else if (y < 0.05) ventIdx.push(v); } }
+  const dorsIdx = [], ventIdx = []; for (let v = 0; v < nv; v++) { const x = L.rest[3 * v], y = L.rest[3 * v + 1]; if (x > 0.4 && x < 1.7) { if (y > YOFF + 0.24) dorsIdx.push(v); else if (y < YOFF + 0.06) ventIdx.push(v); } }
   const cr3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
   // keep the shark roughly belly-down and level: a gentle rigid righting rotation (strength 0..1)
-  function upright(dt, strength) {
-    if (!dorsIdx.length || !ventIdx.length) return;
+  function upright(dt, strength, pitchA = 0) {
+    if (!dorsIdx.length || !ventIdx.length) return 1;
     const av = (idx) => { let x = 0, y = 0, z = 0; for (const v of idx) { x += pos[3 * v]; y += pos[3 * v + 1]; z += pos[3 * v + 2]; } const n = idx.length; return [x / n, y / n, z / n]; };
     const dd = av(dorsIdx), vv = av(ventIdx), hh = av(headIdx), tt = av(tailIdx);
     let u = [dd[0] - vv[0], dd[1] - vv[1], dd[2] - vv[2]]; const ul = Math.hypot(...u) || 1; u = u.map(c => c / ul);
     let f = [hh[0] - tt[0], hh[1] - tt[1], hh[2] - tt[2]]; const fl = Math.hypot(...f) || 1; f = f.map(c => c / fl);
     let w = cr3(u, [0, 1, 0]); // roll: bring the dorsal axis to vertical
     if (u[1] < -0.2) { const m = Math.hypot(w[0], w[1], w[2]); if (m < 0.35) w = [f[0], f[1], f[2]].map(c => c * 0.9); } // upside down: roll about the body axis
-    const fh = Math.hypot(f[0], f[2]) || 1, fHor = [f[0] / fh, 0, f[2] / fh], wp = cr3(f, fHor); // pitch: level the body axis
-    const gain = 2.2 * strength, k = Math.min(1, 3 * dt);
+    const fh = Math.hypot(f[0], f[2]) || 1, ca_ = Math.cos(pitchA), sa_ = Math.sin(pitchA), fHor = [f[0] / fh * ca_, sa_, f[2] / fh * ca_], wp = cr3(f, fHor); // pitch: level the body axis (or nose up/down while climbing/diving)
+    if (u[1] < 0.5) { const m = Math.hypot(w[0], w[1], w[2]) || 1, need = 1.4 * (0.5 - u[1]); if (m < need) w = w.map(c => c / m * need); } // on its side or belly-up: roll back harder
+    const gain = 2.2 * strength * (u[1] < 0.3 ? 1.8 : 1), k = Math.min(1, 3 * dt);
     const wt = [(w[0] + wp[0]) * gain, (w[1] * 0 + wp[1] * 0), (w[2] + wp[2]) * gain];
     // current angular velocity (isotropic estimate), damp the roll/pitch parts toward the target
     let cx = 0, cy = 0, cz = 0, Lx = 0, Ly = 0, Lz = 0, I = 0, mx = 0, my = 0, mz = 0;
@@ -703,6 +704,7 @@ function createWorld(cell) {
     for (let i = 0; i < nv * 3; i += 3) { const rx = pos[i] - cx, ry = pos[i + 1] - cy, rz = pos[i + 2] - cz, vx = vel[i] - mx, vy = vel[i + 1] - my, vz = vel[i + 2] - mz; Lx += ry * vz - rz * vy; Ly += rz * vx - rx * vz; Lz += rx * vy - ry * vx; I += rx * rx + ry * ry + rz * rz; }
     const wc = [Lx / I * 1.6, Ly / I * 1.6, Lz / I * 1.6], dw = [(wt[0] - wc[0]) * k, 0, (wt[2] - wc[2]) * k];
     for (let i = 0; i < nv * 3; i += 3) { const rx = pos[i] - cx, ry = pos[i + 1] - cy, rz = pos[i + 2] - cz; vel[i] += dw[1] * rz - dw[2] * ry; vel[i + 1] += dw[2] * rx - dw[0] * rz; vel[i + 2] += dw[0] * ry - dw[1] * rx; }
+    return u[1];
   }
   let SWA = 0.45;
   function updateActuation() {
@@ -855,12 +857,20 @@ function createWorld(cell) {
   }
 
   // pseudo-fluid propulsion: no water in the sim, so a gentle controller supplies forward thrust, a turn rate and depth hold
-  const SW = { home: null, wasGrab: false, om: 0 };
+  const SW = { home: null, wasGrab: false, om: 0, inv: 0, flip: 0, pa: 0 };
+  const upDot = () => { let a = 0, b = 0, c = 0, d = 0, e = 0, f = 0; for (const v of dorsIdx) { a += pos[3 * v]; b += pos[3 * v + 1]; c += pos[3 * v + 2]; } for (const v of ventIdx) { d += pos[3 * v]; e += pos[3 * v + 1]; f += pos[3 * v + 2]; } const n1 = dorsIdx.length, n2 = ventIdx.length, x = a / n1 - d / n2, y = b / n1 - e / n2, z = c / n1 - f / n2; return y / (Math.hypot(x, y, z) || 1); };
   function swimDrive(dt) {
     if (grabs.size) { SW.wasGrab = true; SW.fh = null; return; }
     const oc = Math.max(0, Math.min(1, (S.drag - 0.05) / 0.85));
     if (S.swim < 0.02) { // ocean gravity alone: lift off the floor to a gentle float, stay level
       SW.home = null; S.bend = 0; if (SW.fh === undefined) SW.fh = null;
+      if (oc <= 0.05) { // resting on the floor: if it ends up on its side or belly-up, after a moment it flips itself back
+        const uy = upDot(); SW.inv = uy < 0.45 ? (SW.inv || 0) + dt : 0;
+        if (SW.inv > 2.2 || SW.flip > 0) {
+          if (!(SW.flip > 0)) { SW.flip = 1.6; for (let i = 1; i < nv * 3; i += 3) vel[i] += 1.1; } // small hop
+          SW.flip -= dt; if (SW.flip <= 0) SW.inv = 0; upright(dt, 2.6); if (uy > 0.85) { SW.flip = 0; SW.inv = 0; }
+        }
+      } else SW.inv = SW.flip = 0;
       if (oc > 0.05) {
         upright(dt, 0.45 * oc);
         let cy = 0, my = 0; for (let i = 0; i < nv * 3; i += 3) { cy += pos[i + 1]; my += vel[i + 1]; } cy /= nv; my /= nv;
@@ -870,7 +880,7 @@ function createWorld(cell) {
       }
       return;
     }
-    upright(dt, 1);
+    upright(dt, 1, SW.pa || 0);
     let cx = 0, cy = 0, cz = 0, mx = 0, my = 0, mz = 0;
     for (let i = 0; i < nv * 3; i += 3) { cx += pos[i]; cy += pos[i + 1]; cz += pos[i + 2]; mx += vel[i]; my += vel[i + 1]; mz += vel[i + 2]; }
     cx /= nv; cy /= nv; cz /= nv; mx /= nv; my /= nv; mz /= nv;
@@ -891,6 +901,7 @@ function createWorld(cell) {
     SW.om += (wT - SW.om) * Math.min(1, 1.5 * dt);
     SW.ei = Math.max(-0.5, Math.min(0.5, (SW.ei || 0) + (S.swimH - cy) * dt * 0.8));
     const vyT = vyH !== null ? vyH : Math.max(-0.5, Math.min(0.5, (S.swimH - cy) * 2.0 + SW.ei));
+    SW.pa = (SW.pa || 0) + (Math.max(-0.45, Math.min(0.45, Math.atan2(my, Math.max(0.15, cr_)) * 1.1)) * sw - (SW.pa || 0)) * Math.min(1, dt * 1.5); // nose follows the climb/dive
     const ax = (fx * cr_ * sw - mx) * k, ay = (vyT * sw - my) * k, az = (fz * cr_ * sw - mz) * k;
     let num = 0, den = 0;
     for (let i = 0; i < nv * 3; i += 3) { const rx = pos[i] - cx, rz = pos[i + 2] - cz; num += rz * (vel[i] - mx) - rx * (vel[i + 2] - mz); den += rx * rx + rz * rz; }
@@ -1287,20 +1298,22 @@ function createKelp(world) {
 }
 
 // ---------------------------------------------------------------- gel jellyfish (same position-based gel: edges + volume + soft shape goal)
-const JF_N = 3, JF_NS = 16, JF_NR = 6, JF_HALF = 1 + JF_NR * JF_NS, JF_PER = 2 * JF_HALF;
-const JF_TENT = 8, JF_TSEG = 9, JF_ORAL = 4, JF_OSEG = 7, JF_SUB = 3;
-const JF_INST = JF_N * (JF_TENT * JF_TSEG + JF_ORAL * JF_OSEG) * JF_SUB;
+const JF_N = 3, JF_NS = 24, JF_NR = 6, JF_HALF = 1 + JF_NR * JF_NS, JF_PER = 2 * JF_HALF;
+const JF_TENT = 16, JF_TSEG = 12, JF_ORAL = 4, JF_OSEG = 11, JF_FR = 3;
+const JF_INST = JF_N * (JF_TENT * (JF_TSEG - 1) + JF_ORAL * (JF_OSEG - 1) * JF_FR + 1);
 const JF_CENTER = [1.5, 0], JF_RAD = 1.85;
 function jfShape(c, out) { // local rest shape (y up = apex), c = 0 relaxed .. 1 contracted; layer 0 outer, 1 inner
-  const TH = 1.9, Rr = 0.30 * (1 - 0.30 * c), Hh = 0.25 * (1 + 0.38 * c);
+  // small pumpkin-like bell: 8 soft lobes, flattened crown, rim tucked just under the equator
+  const TH = 1.74, Rr = 0.19 * (1 - 0.26 * c), Hh = 0.165 * (1 + 0.30 * c);
   let n = 0;
   for (let layer = 0; layer < 2; layer++) for (let r = 0; r <= JF_NR; r++) {
-    const t = r / JF_NR, th = t * TH, th_ = 0.092 * (1 - 0.62 * t) * (1 + 0.15 * c);
+    const t = r / JF_NR, th = t * TH, th_ = 0.05 * (1 - 0.6 * t) * (1 + 0.15 * c);
     const R = layer ? Rr - th_ * 0.9 : Rr, H = layer ? Hh - th_ : Hh;
     const ns = r === 0 ? 1 : JF_NS;
     for (let s = 0; s < ns; s++) {
-      const ph = s / JF_NS * 6.2831853, rr = R * Math.sin(th) * (1 + 0.05 * c * Math.sin(th * 2));
-      out[n++] = rr * Math.cos(ph); out[n++] = H * Math.cos(th); out[n++] = rr * Math.sin(ph);
+      const ph = s / JF_NS * 6.2831853, lobe = 1 + 0.075 * Math.sin(th) * (Math.pow(Math.abs(Math.cos(ph * 4)), 0.7) - 0.6) * (layer ? 0.5 : 1);
+      const rr = R * Math.sin(th) * lobe * (1 + 0.06 * Math.sin(th * 2)), yy = H * Math.cos(th) * (1 - 0.10 * Math.pow(Math.cos(th), 6)); // flatter crown
+      out[n++] = rr * Math.cos(ph); out[n++] = yy; out[n++] = rr * Math.sin(ph);
     }
   }
   return out;
@@ -1361,10 +1374,10 @@ function createJellies(world) {
   }
   // ---- per-jelly state
   const B = [];
-  const P0 = [[0.7, 1.45], [2.7, 1.55], [2.0, -1.65]];
+  const P0 = [[0.6, 1.35], [2.7, 1.45], [2.0, -1.55]];
   for (let j = 0; j < NJ; j++) {
     const p = new Float32Array(NV * 3);
-    B.push({ p, q: new Float32Array(NV * 3), v: new Float32Array(NV * 3), g: new Float32Array(NV * 3), ub: [0, 1, 0], fw: [1, 0, 0], psi: j * 2.1, ph: j * 0.37, per: 2.3 + 0.35 * j, c: 0, pc: 0, yT: 0.9 + 0.3 * j, wt: 0, tp: new Float32Array(JF_TENT * JF_TSEG * 3), tq: new Float32Array(JF_TENT * JF_TSEG * 3), op: new Float32Array(JF_ORAL * JF_OSEG * 3), oq: new Float32Array(JF_ORAL * JF_OSEG * 3), spin: 0 });
+    B.push({ j, p, q: new Float32Array(NV * 3), v: new Float32Array(NV * 3), g: new Float32Array(NV * 3), ub: [0, 1, 0], fw: [1, 0, 0], psi: j * 2.1, ph: j * 0.37, per: 2.3 + 0.35 * j, c: 0, pc: 0, yT: 0.9 + 0.3 * j, wt: 0, tp: new Float32Array(JF_TENT * JF_TSEG * 3), tq: new Float32Array(JF_TENT * JF_TSEG * 3), op: new Float32Array(JF_ORAL * JF_OSEG * 3), oq: new Float32Array(JF_ORAL * JF_OSEG * 3), spin: 0 });
   }
   const norm = v => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
   const basis = b => { // columns: right, up, fwd
@@ -1382,7 +1395,7 @@ function createJellies(world) {
     for (let k = 0; k < JF_TENT; k++) tentInit(b, k);
     for (let k = 0; k < JF_ORAL; k++) oralInit(b, k);
   }
-  const rimIdx = k => JF_HALF + vo(JF_NR, k * 2), oralIdx = k => JF_HALF + vo(3, k * 4);
+  const rimIdx = k => JF_HALF + vo(JF_NR, Math.round(k * JF_NS / JF_TENT)), oralIdx = k => JF_HALF + vo(1, Math.round(k * JF_NS / JF_ORAL));
   function tentInit(b, k) { const a = rimIdx(k) * 3; for (let s = 0; s < JF_TSEG; s++) { const o = (k * JF_TSEG + s) * 3; b.tp[o] = b.tq[o] = b.p[a] + (Math.sin(k + s) * 0.01); b.tp[o + 1] = b.tq[o + 1] = Math.max(0.012, b.p[a + 1] - s * 0.01); b.tp[o + 2] = b.tq[o + 2] = b.p[a + 2] + (Math.cos(k * 2 + s) * 0.01); } }
   function oralInit(b, k) { const a = oralIdx(k) * 3; for (let s = 0; s < JF_OSEG; s++) { const o = (k * JF_OSEG + s) * 3; b.op[o] = b.oq[o] = b.p[a]; b.op[o + 1] = b.oq[o + 1] = Math.max(0.012, b.p[a + 1] - s * 0.01); b.op[o + 2] = b.oq[o + 2] = b.p[a + 2]; } }
   // ---- shark spheres (subsampled surface lattice vertices) + hand colliders
@@ -1417,18 +1430,18 @@ function createJellies(world) {
   }
   function sub(b, dt, act, hc, centre, ub) {
     const p = b.p, q = b.q, v = b.v, ig = act > 0.02;
-    const [R, U, F] = ub, kg = 0.012 + 0.2 * act * act, c = b.c, grav = 9.0 * (1 - 0.94 * act);
+    const [R, U, F] = ub, Fm = J.firm, kg = 0.003 + 0.032 * Fm * Fm + 0.2 * act * act, ks = 0.25 + 0.75 * Fm, c = b.c, grav = 9.0 * (1 - 0.94 * act);
     // integrate
     for (let i = 0; i < NV * 3; i += 3) {
       q[i] = p[i]; q[i + 1] = p[i + 1]; q[i + 2] = p[i + 2];
-      v[i + 1] -= grav * dt; const dm = Math.exp(-(0.5 + 1.1 * act) * dt); v[i] *= dm; v[i + 1] *= dm; v[i + 2] *= dm;
+      v[i + 1] -= grav * dt; const dm = Math.exp(-(0.2 + 2.6 * J.damp + 1.1 * act) * dt); v[i] *= dm; v[i + 1] *= dm; v[i + 2] *= dm;
       p[i] += v[i] * dt; p[i + 1] += v[i + 1] * dt; p[i + 2] += v[i + 2] * dt;
     }
     // edges (rest lengths follow the pulse)
     for (let it = 0; it < 2; it++) {
       for (let e = 0; e < ne; e++) {
         const a = E[2 * e] * 3, bb = E[2 * e + 1] * 3, dx = p[bb] - p[a], dy = p[bb + 1] - p[a + 1], dz = p[bb + 2] - p[a + 2], d = Math.hypot(dx, dy, dz) || 1e-6;
-        const L = el0[e] + (el1[e] - el0[e]) * c, k = (ET[e] === 0 ? 0.55 : ET[e] === 1 ? 0.3 : 0.2) * (d - L) / d * 0.5;
+        const L = el0[e] + (el1[e] - el0[e]) * c, k = (ET[e] === 0 ? 0.55 : ET[e] === 1 ? 0.3 : 0.2) * ks * (d - L) / d * 0.5;
         p[a] += dx * k; p[a + 1] += dy * k; p[a + 2] += dz * k; p[bb] -= dx * k; p[bb + 1] -= dy * k; p[bb + 2] -= dz * k;
       }
       volumeFix(b, V0 + (V1 - V0) * c);
@@ -1439,6 +1452,9 @@ function createJellies(world) {
       const x = S0[3 * i] + (S1[3 * i] - S0[3 * i]) * c, y = S0[3 * i + 1] + (S1[3 * i + 1] - S0[3 * i + 1]) * c, z = S0[3 * i + 2] + (S1[3 * i + 2] - S0[3 * i + 2]) * c;
       const gx = cx + R[0] * x + U[0] * y + F[0] * z, gy = cy + R[1] * x + U[1] * y + F[1] * z, gz = cz + R[2] * x + U[2] * y + F[2] * z;
       p[3 * i] += (gx - p[3 * i]) * kg; p[3 * i + 1] += (gy - p[3 * i + 1]) * kg; p[3 * i + 2] += (gz - p[3 * i + 2]) * kg;
+    }
+    for (const gr of grabs.values()) if (gr.j === b.j && gr.tg) { // held by a hand/pointer: drag the nearby gel toward the target
+      for (let n = 0; n < gr.idx.length; n++) { const i = gr.idx[n] * 3, w = gr.w[n] * 0.45; p[i] += (gr.tg[0] + gr.off[3 * n] - p[i]) * w; p[i + 1] += (gr.tg[1] + gr.off[3 * n + 1] - p[i + 1]) * w; p[i + 2] += (gr.tg[2] + gr.off[3 * n + 2] - p[i + 2]) * w; }
     }
     collide(b, dt, hc);
     const id = 1 / dt; for (let i = 0; i < NV * 3; i++) v[i] = (p[i] - q[i]) * id;
@@ -1459,11 +1475,11 @@ function createJellies(world) {
     if (s < 1e-12) return; const lam = (Vt - V) / s * 0.8;
     for (let i = 0; i < NV * 3; i++) p[i] += gradv[i] * lam;
   }
-  function chain(P, Q, base, n, len, anchor, dt, grav, drag, floorY) {
+  function chain(P, Q, base, n, len, anchor, dt, G, drag, floorY) {
     P[base] = anchor[0]; P[base + 1] = anchor[1]; P[base + 2] = anchor[2];
     for (let s = 1; s < n; s++) {
       const o = base + s * 3, x = P[o], y = P[o + 1], z = P[o + 2];
-      P[o] = x + (x - Q[o]) * drag; P[o + 1] = y + (y - Q[o + 1]) * drag - grav * dt * dt; P[o + 2] = z + (z - Q[o + 2]) * drag; Q[o] = x; Q[o + 1] = y; Q[o + 2] = z;
+      P[o] = x + (x - Q[o]) * drag + G[0] * dt * dt; P[o + 1] = y + (y - Q[o + 1]) * drag + G[1] * dt * dt; P[o + 2] = z + (z - Q[o + 2]) * drag + G[2] * dt * dt; Q[o] = x; Q[o + 1] = y; Q[o + 2] = z;
     }
     for (let it = 0; it < 3; it++) {
       P[base] = anchor[0]; P[base + 1] = anchor[1]; P[base + 2] = anchor[2];
@@ -1476,8 +1492,10 @@ function createJellies(world) {
   }
   const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
   let swimOn = false, tm = 0;
+  J.firm = 0.55; J.damp = 0.35;
+  J.setParams = (f, d) => { J.firm = f; J.damp = d; };
   J.setSwim = v => { swimOn = !!v; };
-  J.reset = () => { for (let j = 0; j < NJ; j++) place(j, 1.25 + 0.2 * j); J.active = 0; swimOn = false; skin(); };
+  J.reset = () => { grabs.clear(); for (let j = 0; j < NJ; j++) place(j, 1.25 + 0.2 * j); J.active = 0; swimOn = false; skin(); };
   function skin() {
     for (let j = 0; j < NJ; j++) J.pos.set(B[j].p, j * NV * 3);
     for (let j = 0; j < NJ; j++) {
@@ -1507,7 +1525,7 @@ function createJellies(world) {
         let hx = Math.cos(b.psi), hz = Math.sin(b.psi);
         const ox = c0[0] - JF_CENTER[0], oz = c0[2] - JF_CENTER[1], orr = Math.hypot(ox, oz);
         if (orr > JF_RAD * 0.62) { const w = Math.min(1, (orr - JF_RAD * 0.62) / (JF_RAD * 0.38)) * 2.2; hx -= ox / orr * w; hz -= oz / orr * w; }
-        for (let k = 0; k < NJ; k++) if (k !== j) { const dx = c0[0] - cen[k][0], dy = c0[1] - cen[k][1], dz = c0[2] - cen[k][2], d = Math.hypot(dx, dy, dz); if (d < 1.7) { const w = (1.7 - d) / 1.7 * 2.6; hx += dx / (d || 1) * w; hz += dz / (d || 1) * w; } }
+        for (let k = 0; k < NJ; k++) if (k !== j) { const dx = c0[0] - cen[k][0], dy = c0[1] - cen[k][1], dz = c0[2] - cen[k][2], d = Math.hypot(dx, dy, dz); if (d < 1.2) { const w = (1.2 - d) / 1.2 * 2.6; hx += dx / (d || 1) * w; hz += dz / (d || 1) * w; } }
         const hl = Math.hypot(hx, hz) || 1; hx /= hl; hz /= hl; b.psi += Math.atan2(hz * Math.cos(b.psi) - hx * Math.sin(b.psi), hx * Math.cos(b.psi) + hz * Math.sin(b.psi)) * Math.min(1, dt * 1.6);
         b.fw = norm([Math.cos(b.psi), 0, Math.sin(b.psi)]);
         const dy = b.yT - c0[1], pitch = Math.max(-0.25, Math.min(0.25, dy * 0.35));
@@ -1526,28 +1544,61 @@ function createJellies(world) {
         let ax = 0, ay = 0, az = 0, bx = 0, by = 0, bz = 0; const pa = B[a].p, pb = B[c].p;
         for (let i = 0; i < NV; i++) { ax += pa[3 * i]; ay += pa[3 * i + 1]; az += pa[3 * i + 2]; bx += pb[3 * i]; by += pb[3 * i + 1]; bz += pb[3 * i + 2]; }
         ax /= NV; ay /= NV; az /= NV; bx /= NV; by /= NV; bz /= NV;
-        const dx = bx - ax, dy = by - ay, dz = bz - az, d = Math.hypot(dx, dy, dz) || 1e-6, D0 = 0.92;
+        const dx = bx - ax, dy = by - ay, dz = bz - az, d = Math.hypot(dx, dy, dz) || 1e-6, D0 = 0.62;
         if (d < D0) { const k = (D0 - d) / d * 0.5; for (let i = 0; i < NV; i++) { pa[3 * i] -= dx * k; pa[3 * i + 1] -= dy * k; pa[3 * i + 2] -= dz * k; pb[3 * i] += dx * k; pb[3 * i + 1] += dy * k; pb[3 * i + 2] += dz * k; } }
       }
     }
     // tentacles
     for (let j = 0; j < NJ; j++) {
-      const b = B[j], cj = cen[j];
-      for (let k = 0; k < JF_TENT; k++) { const a = rimIdx(k) * 3; chain(b.tp, b.tq, k * JF_TSEG * 3, JF_TSEG, 0.058, [b.p[a], b.p[a + 1], b.p[a + 2]], dt, 0.6 + 2.4 * (1 - act), 0.975, 0.01); }
-      for (let k = 0; k < JF_ORAL; k++) { const a = oralIdx(k) * 3; chain(b.op, b.oq, k * JF_OSEG * 3, JF_OSEG, 0.066, [b.p[a], b.p[a + 1], b.p[a + 2]], dt, 0.5 + 2.5 * (1 - act), 0.97, 0.012); }
+      const b = B[j], u = b.ub, gw = 0.6 + 2.6 * (1 - act), gb = 3.2 * act, G = [-u[0] * gb, -gw - u[1] * gb, -u[2] * gb], G2 = [G[0] * 1.3, G[1] * 1.3, G[2] * 1.3];
+      for (let k = 0; k < JF_TENT; k++) { const a = rimIdx(k) * 3; chain(b.tp, b.tq, k * JF_TSEG * 3, JF_TSEG, 0.046 + 0.012 * ((k * 7) % 5) / 4, [b.p[a], b.p[a + 1], b.p[a + 2]], dt, G, 0.95, 0.01); }
+      for (let k = 0; k < JF_ORAL; k++) { const a = oralIdx(k) * 3; chain(b.op, b.oq, k * JF_OSEG * 3, JF_OSEG, 0.046, [b.p[a], b.p[a + 1], b.p[a + 2]], dt, G2, 0.94, 0.012); }
     }
     skin();
   };
+  // segment as a stretched bead: local x along the segment
+  const qx2d = (dx, dy, dz) => { let x = 0, y = -dz, z = dy, w = 1 + dx; if (w < 1e-4) { x = 0; y = 0; z = 1; w = 0; } const l = Math.hypot(x, y, z, w); return [x / l, y / l, z / l, w / l]; };
+  const qmul = (a, b) => [a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1], a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0], a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3], a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2]];
   J.fill = () => {
     let n = 0; const I = J.inst; if (!J.show) { J.count = 0; return 0; }
-    const put = (x, y, z, r, sh) => { const o = n * 12; I[o] = x; I[o + 1] = y; I[o + 2] = z; I[o + 3] = 7; I[o + 4] = 0; I[o + 5] = 0; I[o + 6] = 0; I[o + 7] = 1; I[o + 8] = r; I[o + 9] = r; I[o + 10] = r; I[o + 11] = sh; n++; };
+    const put = (x, y, z, q, sx, sy, sz, sh) => { const o = n * 12; I[o] = x; I[o + 1] = y; I[o + 2] = z; I[o + 3] = 7; I[o + 4] = q[0]; I[o + 5] = q[1]; I[o + 6] = q[2]; I[o + 7] = q[3]; I[o + 8] = sx; I[o + 9] = sy; I[o + 10] = sz; I[o + 11] = sh; n++; };
     for (let j = 0; j < NJ; j++) {
       const b = B[j];
-      for (let k = 0; k < JF_TENT; k++) for (let s = 0; s < JF_TSEG; s++) { const o = (k * JF_TSEG + s) * 3, o2 = (k * JF_TSEG + Math.min(JF_TSEG - 1, s + 1)) * 3, t = s / (JF_TSEG - 1), r = 0.0095 * (1 - 0.5 * t); for (let m = 0; m < JF_SUB; m++) { const f = m / JF_SUB; put(b.tp[o] + (b.tp[o2] - b.tp[o]) * f, b.tp[o + 1] + (b.tp[o2 + 1] - b.tp[o + 1]) * f, b.tp[o + 2] + (b.tp[o2 + 2] - b.tp[o + 2]) * f, r, t); } }
-      for (let k = 0; k < JF_ORAL; k++) for (let s = 0; s < JF_OSEG; s++) { const o = (k * JF_OSEG + s) * 3, o2 = (k * JF_OSEG + Math.min(JF_OSEG - 1, s + 1)) * 3, t = s / (JF_OSEG - 1), r = 0.019 * (1 - 0.6 * t * t); for (let m = 0; m < JF_SUB; m++) { const f = m / JF_SUB; put(b.op[o] + (b.op[o2] - b.op[o]) * f, b.op[o + 1] + (b.op[o2 + 1] - b.op[o + 1]) * f, b.op[o + 2] + (b.op[o2 + 2] - b.op[o + 2]) * f, r, 0.35 + 0.65 * t); } }
+      // long fine tentacles from the rim
+      for (let k = 0; k < JF_TENT; k++) for (let s = 0; s < JF_TSEG - 1; s++) {
+        const o = (k * JF_TSEG + s) * 3, o2 = o + 3, P = b.tp, dx = P[o2] - P[o], dy = P[o2 + 1] - P[o + 1], dz = P[o2 + 2] - P[o + 2], l = Math.hypot(dx, dy, dz) || 1e-6, t = s / (JF_TSEG - 2);
+        put((P[o] + P[o2]) / 2, (P[o + 1] + P[o2 + 1]) / 2, (P[o + 2] + P[o2 + 2]) / 2, qx2d(dx / l, dy / l, dz / l), l * 0.62, 0.0042 * (1 - 0.5 * t), 0.0042 * (1 - 0.5 * t), 0.05 + 0.4 * t);
+      }
+      // frilly oral arms: twisted, ruffled ribbons hanging from the centre
+      for (let k = 0; k < JF_ORAL; k++) for (let s = 0; s < JF_OSEG - 1; s++) {
+        const o = (k * JF_OSEG + s) * 3, o2 = o + 3, P = b.op, dx = P[o2] - P[o], dy = P[o2 + 1] - P[o + 1], dz = P[o2 + 2] - P[o + 2], l = Math.hypot(dx, dy, dz) || 1e-6, t = s / (JF_OSEG - 2);
+        const qd = qx2d(dx / l, dy / l, dz / l), wdt = 0.042 * (1 - 0.55 * t) + 0.006;
+        for (let f = 0; f < JF_FR; f++) {
+          const u = (f + 0.5) / JF_FR, ang = k * 1.57 + (s + u) * 1.9 + Math.sin(tm * 1.3 + s + k) * 0.35, ha = ang / 2, qr = qmul(qd, [Math.sin(ha), 0, 0, Math.cos(ha)]);
+          const wob = Math.sin((s + u) * 3.1 + k * 2 + tm * 0.9) * 0.012;
+          put(P[o] + dx * u + wob * (k & 1 ? 1 : -1), P[o + 1] + dy * u, P[o + 2] + dz * u + wob, qr, l * 0.85, wdt * (0.8 + 0.35 * Math.sin((s + u) * 5.3 + k)), 0.0035, 0.55 + 0.45 * t);
+        }
+      }
+      // glowing manubrium under the bell
+      { const c2 = JF_HALF * 3, u = b.ub; put(b.p[c2] - u[0] * 0.03, b.p[c2 + 1] - u[1] * 0.03, b.p[c2 + 2] - u[2] * 0.03, [0, 0, 0, 1], 0.04, 0.03, 0.04, 0.52); }
     }
     J.count = n; return n;
   };
+  const grabs = new Map();
+  J.pick = (ro, rd, maxPerp = 0.07) => { // ray -> nearest jelly surface vertex
+    let best = null;
+    for (let j = 0; j < NJ; j++) { const p = B[j].p; for (let v = 0; v < NV; v++) { const i = v * 3, vx = p[i] - ro[0], vy = p[i + 1] - ro[1], vz = p[i + 2] - ro[2], t = vx * rd[0] + vy * rd[1] + vz * rd[2]; if (t <= 0) continue; const d = Math.hypot(vx - rd[0] * t, vy - rd[1] * t, vz - rd[2] * t); if (d < maxPerp && (!best || t < best.t)) best = { j, v, t }; } }
+    return best;
+  };
+  J.near = (q, r) => { let best = null, bd = r; for (let j = 0; j < NJ; j++) { const p = B[j].p; for (let v = 0; v < NV; v++) { const d = Math.hypot(p[3 * v] - q[0], p[3 * v + 1] - q[1], p[3 * v + 2] - q[2]); if (d < bd) { bd = d; best = { j, v, t: d }; } } } return best; };
+  J.grab = (id, h) => {
+    const p = B[h.j].p, cx = p[3 * h.v], cy = p[3 * h.v + 1], cz = p[3 * h.v + 2], idx = [], w = [], off = [], R0 = 0.11;
+    for (let v = 0; v < NV; v++) { const d = Math.hypot(p[3 * v] - cx, p[3 * v + 1] - cy, p[3 * v + 2] - cz); if (d < R0) { idx.push(v); w.push(1 - d / R0 * 0.8); off.push(p[3 * v] - cx, p[3 * v + 1] - cy, p[3 * v + 2] - cz); } }
+    grabs.set(id, { j: h.j, idx, w, off, tg: [cx, cy, cz], c0: [cx, cy, cz] }); return [cx, cy, cz];
+  };
+  J.move = (id, tg) => { const g = grabs.get(id); if (g) g.tg = [tg[0], Math.max(0.02, tg[1]), tg[2]]; };
+  J.release = id => { if (id === undefined) grabs.clear(); else grabs.delete(id); };
+  J.grabbed = id => grabs.get(id);
   J.centres = () => B.map(b => { const p = b.p; let x = 0, y = 0, z = 0; for (let i = 0; i < NV; i++) { x += p[3 * i]; y += p[3 * i + 1]; z += p[3 * i + 2]; } return [x / NV, y / NV, z / NV]; });
   J.volumeRatio = () => B.map(b => vol(b.p, 0) / (V0 + (V1 - V0) * b.c));
   J.reset();
@@ -1786,10 +1837,18 @@ fn qrot(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
   if (i.kind > 1.5 && i.kind < 2.5) { col = base * (0.55 + 0.45 * ndl) + vec3<f32>(sp * 0.4); }
   if (i.kind > 3.5) { let rim = pow(1.0 - max(dot(N, V), 0.0), 2.2); col = base * (0.42 + 0.45 * ndl * k) * ao + vec3<f32>(sp * 0.8 * k) + vec3<f32>(0.45, 0.68, 0.85) * rim * 0.45 + env(reflect(-V, N)) * fres * 0.35; if (i.kind > 4.5 && i.kind < 5.5) { col = base * (0.55 + 0.6 * ndl) + vec3<f32>(sp * 0.5) + vec3<f32>(0.25, 0.05, 0.0) * rim; } if (i.kind > 5.5) { col = mix(col, vec3<f32>(0.9, 0.95, 1.0), 0.25); } }
   if (i.kind > 2.5 && i.kind < 3.5) { let tr = pow(1.0 - max(dot(N, V), 0.0), 2.0); col = base * (0.30 + 0.75 * ndl * k) * ao + vec3<f32>(sp * 0.55 * k) + base * tr * 0.55 + g.glow.rgb * lu() * 0.45 * i.shade; }
-  if (i.kind > 6.5) { // jellyfish tentacles: translucent gel strands in the colourway
-    let rim7 = pow(1.0 - max(dot(N, V), 0.0), 1.6);
-    let b7 = mix(g.tint.rgb * 0.75 + g.pale.rgb * 0.15, g.pale.rgb * 0.95, i.shade * 0.8);
-    col = b7 * (0.42 + 0.5 * ndl * k) + vec3<f32>(sp * 0.5 * k) + g.glow.rgb * (0.10 + 0.5 * i.shade) * (0.5 + lu()) * 0.7 + g.pale.rgb * rim7 * 0.35;
+  if (i.kind > 6.5) { // jellyfish tentacles (shade < 0.5) and frilly oral arms (shade >= 0.5): pink-peach translucent gel
+    let rim7 = pow(1.0 - abs(dot(N, V)), 1.5);
+    let fr = step(0.5, i.shade);
+    let tt = select(i.shade * 2.0, (i.shade - 0.5) * 2.0, fr > 0.5);
+    let pinkA = vec3<f32>(1.0, 0.62, 0.55);
+    let peach = vec3<f32>(1.0, 0.80, 0.70);
+    let orng = vec3<f32>(1.0, 0.45, 0.20);
+    var b7 = mix(vec3<f32>(0.98, 0.88, 0.86), pinkA, tt * 0.7);
+    if (fr > 0.5) { b7 = mix(peach, mix(pinkA, vec3<f32>(0.95, 0.42, 0.55), tt), 0.4 + 0.6 * rim7); }
+    let ndl2 = abs(dot(N, L));
+    col = b7 * (0.55 + 0.45 * ndl2 * k) + vec3<f32>(sp * 0.45 * k) + orng * rim7 * fr * 0.35 + pinkA * rim7 * 0.25 + g.glow.rgb * lu() * 0.35 * (0.3 + rim7);
+    if (i.shade > 0.515 && i.shade < 0.525) { col = vec3<f32>(1.0, 0.55, 0.25) * (0.75 + 0.35 * ndl2) + vec3<f32>(1.0, 0.75, 0.45) * rim7 * 0.4; }
   }
   return vec4<f32>(col, 1.0);
 }
@@ -2036,26 +2095,32 @@ fn markings(p0: vec3<f32>, finw: f32, nrm: vec3<f32>, pf: f32) -> Mk {
   let uG = clamp(project(wp + refract(rayD, N, 1.0 / 1.34) * sp), vec2<f32>(0.002), vec2<f32>(0.998));
   let uB = clamp(project(wp + refract(rayD, N, 1.0 / 1.37) * sp), vec2<f32>(0.002), vec2<f32>(0.998));
   let sc = vec3<f32>(textureSampleLevel(sceneTex, samp, uR, 0.0).r, textureSampleLevel(sceneTex, samp, uG, 0.0).g, textureSampleLevel(sceneTex, samp, uB, 0.0).b);
-  let hue = mix(g.tint.rgb, g.glow.rgb, 0.18 * id);
-  let T = exp(-g.absorb.rgb * thick * 3.2);
+  // pink-peach bell with an orange glow inside, 8 soft lobes, scalloped orange rim
+  let pink = vec3<f32>(1.0, 0.58, 0.55);
+  let orng = vec3<f32>(1.0, 0.46, 0.18);
+  let absorbJ = vec3<f32>(0.35, 1.9, 1.5);
+  let T = exp(-absorbJ * thick * 3.0);
   let wrap = clamp((dot(N, L) + 0.5) / 1.5, 0.0, 1.0);
-  var trans = sc * T + hue * (1.0 - T) * (0.18 + 0.60 * wrap * k) * g.absorb.w;
+  let inner = mix(pink, orng, smoothstep(0.35, 0.85, t) * 0.75);
+  var trans = sc * T + inner * (1.0 - T) * (0.35 + 0.65 * wrap * k);
   let F = 0.04 + 0.96 * pow(1.0 - ndv, 4.0);
   let refl = env(reflect(rayD, N));
   let Hh = normalize(L + V);
   let nh = max(dot(N, Hh), 0.0);
-  let spec = (pow(nh, 220.0) * 3.5 + pow(nh, 30.0) * 0.18) * k;
-  var col = trans * (1.0 - F) + refl * F + vec3<f32>(spec);
-  // radial canals, bright rim band, four gonad lobes seen through the bell
-  let cd = abs(fract(ph * 8.0 + 0.5) - 0.5);
-  let canal = (1.0 - smoothstep(0.0, 0.05, cd)) * smoothstep(0.06, 0.16, t) * (1.0 - smoothstep(0.90, 0.99, t));
-  let rimB = smoothstep(0.86, 0.99, t);
-  let lobe = pow(0.5 + 0.5 * cos(ph * 25.1327), 3.0) * exp(-pow((t - 0.40) / 0.11, 2.0)) * layer;
-  let ringN = 0.5 + 0.5 * cos(ph * 6.2832 * 24.0);
-  col = mix(col, g.pale.rgb * (0.45 + 0.7 * wrap) , canal * 0.28);
-  col = mix(col, hue * (0.55 + 0.5 * wrap) + g.pale.rgb * 0.12, rimB * (0.35 + 0.25 * ringN));
-  col = mix(col, g.milk.rgb * (0.5 + 0.6 * wrap), clamp(lobe * 0.75, 0.0, 0.8));
-  col = col + g.glow.rgb * (canal * 0.35 + rimB * 0.22 + lobe * 0.5 + pow(1.0 - ndv, 3.0) * 0.12) * lu() * 1.6;
+  let spec = (pow(nh, 260.0) * 1.2 + pow(nh, 30.0) * 0.08) * k;
+  var col = trans * (1.0 - F) + refl * F * 0.55 + vec3<f32>(spec);
+  // lobe grooves (thin pale seams), warm glow in the lower half, scalloped orange rim
+  let gd = abs(fract(ph * 8.0) - 0.5);
+  let seam = (1.0 - smoothstep(0.0, 0.06, 0.5 - gd)) * 0.0 + (1.0 - smoothstep(0.0, 0.045, abs(gd - 0.5))) * smoothstep(0.1, 0.25, t) * (1.0 - smoothstep(0.9, 0.98, t));
+  let scal = 0.5 + 0.5 * cos(ph * 6.2832 * 32.0);
+  let rimB = smoothstep(0.86 + 0.05 * scal, 0.97, t);
+  let glowB = exp(-pow((t - 0.72) / 0.20, 2.0));
+  col = mix(col, vec3<f32>(1.0, 0.86, 0.82) * (0.55 + 0.5 * wrap), seam * 0.45);
+  col = col + orng * glowB * (0.22 + 0.25 * layer) * (0.6 + 0.4 * wrap);
+  col = mix(col, orng * (0.75 + 0.35 * wrap) + vec3<f32>(spec), rimB * 0.85);
+  col = mix(col, vec3<f32>(0.80, 0.90, 1.0) * (0.55 + 0.5 * wrap), layer * (1.0 - smoothstep(0.55, 0.95, t)) * 0.22); // pale bluish sub-umbrella
+  col = col + pink * pow(1.0 - ndv, 2.5) * 0.30 + g.glow.rgb * (rimB * 0.3 + glowB * 0.3) * lu() * 1.4;
+  let idv = id;
   return vec4<f32>(tonemap(col * g.bgLow.w), 1.0);
 }
 
@@ -2158,7 +2223,7 @@ const WAYS = [
 ];
 
 // ---------------------------------------------------------------- state
-let huntCool = 0;
+let huntCool = 0, jfGid = 0;
 // "follow my food": one big krill the shark chases; grab it and lead the shark around, it respawns when eaten
 const LURE_K = 7, lure = { p: [2, 0.8, 0.5], v: [0, 0, 0], grab: false, t: 0, s: 0, id: 0, act: false, wait: 1.2 }, LI = new Float32Array(12);
 function lureSpawn() {
@@ -2339,7 +2404,7 @@ function advance(dtReal) {
   world.step(dt);
   krill.step(dt, steer);
   if (ST.kelp) kelp.step(dt);
-  if (ST.jf) { jf.setSwim(ST.swim); jf.step(dt); }
+  if (ST.jf) { jf.setSwim(ST.swim); jf.setParams(ST.firm, ST.damp); jf.step(dt); }
   simMs = simMs * 0.9 + (performance.now() - t0) * 0.1;
   adaptT += dtReal;
   if (adaptT > 0.6) { adaptT = 0; if (simMs > 17 && ST.nsub > 2) ST.nsub--; else if (simMs < 7 && ST.nsub < 5) ST.nsub++; }
@@ -2532,6 +2597,8 @@ function bindPointer() {
       const vx = lure.p[0] - r.ro[0], vy = lure.p[1] - r.ro[1], vz = lure.p[2] - r.ro[2], tt = vx * r.rd[0] + vy * r.rd[1] + vz * r.rd[2];
       if (tt > 0 && Math.hypot(vx - r.rd[0] * tt, vy - r.rd[1] * tt, vz - r.rd[2] * tt) < 0.2) { lure.grab = true; drag = { mode: 'lure', t: vx * r.fwd[0] + vy * r.fwd[1] + vz * r.fwd[2] }; canvas.classList.add('grabbing'); return; }
     }
+    if (ST.jf) { const jh = jf.pick(r.ro, r.rd); if (jh) { let st = 1e9; if (v >= 0) { const P_ = world.pos; st = (P_[3 * v] - r.ro[0]) * r.rd[0] + (P_[3 * v + 1] - r.ro[1]) * r.rd[1] + (P_[3 * v + 2] - r.ro[2]) * r.rd[2]; }
+      if (jh.t < st + 0.05) { const c = jf.grab('d', jh); drag = { mode: 'jf', c, t: (c[0] - r.ro[0]) * r.fwd[0] + (c[1] - r.ro[1]) * r.fwd[1] + (c[2] - r.ro[2]) * r.fwd[2] }; canvas.classList.add('grabbing'); if (ST.pause) { ST.pause = false; $('cPause').checked = false; } return; } } }
     const kc = (v < 0 && ST.kelp) ? kelp.pick(r.ro, r.rd, 0.14) : -1;
     if (kc >= 0) { drag = { mode: 'kelp', c: kc, x: e.clientX, y: e.clientY }; canvas.classList.add('grabbing'); return; }
     if (v >= 0) {
@@ -2547,6 +2614,7 @@ function bindPointer() {
     if (ptrs.size === 2) { const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y); if (pinch0 > 0) cam.dist = clamp(cam.dist * pinch0 / d, 1.6, 9); pinch0 = d; return; }
     if (!drag) return;
     if (drag.mode === 'lure') { const r = pickRay(e.clientX, e.clientY), den = Math.max(0.2, r.rd[0] * r.fwd[0] + r.rd[1] * r.fwd[1] + r.rd[2] * r.fwd[2]), tt = drag.t / den; lureSet(r.ro[0] + r.rd[0] * tt, r.ro[1] + r.rd[1] * tt, r.ro[2] + r.rd[2] * tt); return; }
+    if (drag.mode === 'jf') { const r = pickRay(e.clientX, e.clientY), den = Math.max(0.2, r.rd[0] * r.fwd[0] + r.rd[1] * r.fwd[1] + r.rd[2] * r.fwd[2]), tt = drag.t / den; jf.move('d', [r.ro[0] + r.rd[0] * tt, r.ro[1] + r.rd[1] * tt, r.ro[2] + r.rd[2] * tt]); return; }
     if (drag.mode === 'kelp') { const r = pickRay(e.clientX, e.clientY); if (r.rd[1] < -0.02) { const t = -r.ro[1] / r.rd[1]; kelp.move(drag.c, r.ro[0] + r.rd[0] * t, r.ro[2] + r.rd[2] * t); } return; }
     if (drag.mode === 'orbit') { cam.yaw -= dx * 0.006; cam.pitch = clamp(cam.pitch + dy * 0.006, 0.06, 1.45); return; }
     const r = pickRay(e.clientX, e.clientY);
@@ -2558,7 +2626,7 @@ function bindPointer() {
     tg[1] = Math.max(0.02, tg[1]);
     world.moveGrab(tg, drag.twist);
   });
-  const up = e => { if (drag && drag.mode === 'lure') lure.grab = false; ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch0 = 0; if (drag && drag.mode === 'grab') world.endGrab(); drag = null; canvas.classList.remove('grabbing'); };
+  const up = e => { if (drag && drag.mode === 'lure') lure.grab = false; if (drag && drag.mode === 'jf') jf.release('d'); ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch0 = 0; if (drag && drag.mode === 'grab') world.endGrab(); drag = null; canvas.classList.remove('grabbing'); };
   canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
   canvas.addEventListener('wheel', e => { e.preventDefault(); cam.dist = clamp(cam.dist * Math.exp(e.deltaY * 0.0012), 1.6, 9); }, { passive: false });
 }
@@ -2751,7 +2819,7 @@ async function enterXR(ar) {
         Array.from(session.inputSources).forEach(addSrc);
       }
     }
-    session.addEventListener('end', () => { world.endGrab(-1); world.setColliders(CB, 0); const dg = xrS ? `${xrS.diag} frames:${xrS.frames}${xrErrs.length ? ' ERR: ' + xrErrs.join(' | ') : ''}` : ''; xrS = null; XI.fill(0); xiN = 0; if (fmt0) { setFmt(fmt0); fmt0 = null; } canvas.width = 0; resize(); $('vrNote').textContent = 'Last XR session → ' + dg; lastT = performance.now(); requestAnimationFrame(frame); });
+    session.addEventListener('end', () => { world.endGrab(-1); jf.release(); world.setColliders(CB, 0); const dg = xrS ? `${xrS.diag} frames:${xrS.frames}${xrErrs.length ? ' ERR: ' + xrErrs.join(' | ') : ''}` : ''; xrS = null; XI.fill(0); xiN = 0; if (fmt0) { setFmt(fmt0); fmt0 = null; } canvas.width = 0; resize(); $('vrNote').textContent = 'Last XR session → ' + dg; lastT = performance.now(); requestAnimationFrame(frame); });
     session.requestAnimationFrame(xrFrame);
   } catch (e) { console.error(e); $('vrNote').textContent = 'Could not start ' + (ar ? 'AR' : 'VR') + ': ' + e.message; }
 }
@@ -2803,7 +2871,7 @@ function xrSelect(ev, down) {
   if (!down) {
     s.pinch.delete(src);
     { const g = s.grabs.get(src); if (g) { world.endGrab(g.id); s.grabs.delete(src); } }
-    if (s.kgrabs) { const kg = s.kgrabs.get(src); if (kg && kg.lure) lure.grab = false; s.kgrabs.delete(src); }
+    if (s.kgrabs) { const kg = s.kgrabs.get(src); if (kg && kg.lure) lure.grab = false; if (kg && kg.jf) jf.release(kg.jf); s.kgrabs.delete(src); }
     if (s.pgrab && s.pgrab.src === src) s.pgrab = null;
     return;
   }
@@ -2826,6 +2894,12 @@ function xrSelect(ev, down) {
     const pk = pinchPoint(frame, src);
     if (pk) { const ps = M4.pt(XR_MI, pk); if (Math.hypot(ps[0] - lure.p[0], ps[1] - lure.p[1], ps[2] - lure.p[2]) < 0.3) { lure.grab = true; s.kgrabs.set(src, { lure: true, direct: true, off: [lure.p[0] - ps[0], lure.p[1] - ps[1], lure.p[2] - ps[2]], id: lure.id }); return; } }
     else { const vx = lure.p[0] - ro[0], vy = lure.p[1] - ro[1], vz = lure.p[2] - ro[2], tt = vx * rd[0] + vy * rd[1] + vz * rd[2]; if (tt > 0 && Math.hypot(vx - rd[0] * tt, vy - rd[1] * tt, vz - rd[2] * tt) < 0.18) { lure.grab = true; s.kgrabs.set(src, { lure: true, dist: tt, id: lure.id }); return; } }
+  }
+  if (ST.jf) { // jellyfish: pinch close to one, or point the ray at it
+    const pk = pinchPoint(frame, src), gid = 'x' + (++jfGid);
+    if (pk) { const ps = M4.pt(XR_MI, pk), jh = jf.near(ps, 0.12); if (jh) { const c = jf.grab(gid, jh); s.kgrabs.set(src, { jf: gid, direct: true, off: [c[0] - ps[0], c[1] - ps[1], c[2] - ps[2]] }); return; } }
+    else { const jh = jf.pick(ro, rd, 0.06), sv = world.pickVertex(ro, rd); let st = 1e9; if (sv >= 0) st = (world.pos[3 * sv] - ro[0]) * rd[0] + (world.pos[3 * sv + 1] - ro[1]) * rd[1] + (world.pos[3 * sv + 2] - ro[2]) * rd[2];
+      if (jh && jh.t < st + 0.05) { jf.grab(gid, jh); s.kgrabs.set(src, { jf: gid, dist: jh.t }); return; } }
   }
   if (ST.kelp) { // pinch a seaweed clump and slide it over the floor
     const pk = pinchPoint(frame, src);
@@ -2936,6 +3010,10 @@ function xrFrameInner(t, frame, s) {
       if (kg.id !== lure.id) s.kgrabs.delete(src); // it was eaten
       else if (kg.direct) { const pk = pinchPoint(frame, src); if (pk) { const ps = M4.pt(XR_MI, pk); lureSet(ps[0] + kg.off[0], ps[1] + kg.off[1], ps[2] + kg.off[2]); } }
       else { const ro = M4.pt(XR_MI, ray.ro), rd = nrm(M4.dir(XR_MI, ray.rd)); lureSet(ro[0] + rd[0] * kg.dist, ro[1] + rd[1] * kg.dist, ro[2] + rd[2] * kg.dist); }
+    } else if (kg && kg.jf) {
+      if (!XR_MI) XR_MI = M4.inv(XR_M);
+      if (kg.direct) { const pk = pinchPoint(frame, src); if (pk) { const ps = M4.pt(XR_MI, pk); jf.move(kg.jf, [ps[0] + kg.off[0], ps[1] + kg.off[1], ps[2] + kg.off[2]]); } }
+      else { const ro = M4.pt(XR_MI, ray.ro), rd = nrm(M4.dir(XR_MI, ray.rd)); jf.move(kg.jf, [ro[0] + rd[0] * kg.dist, ro[1] + rd[1] * kg.dist, ro[2] + rd[2] * kg.dist]); }
     } else if (kg) {
       if (!XR_MI) XR_MI = M4.inv(XR_M);
       if (kg.direct) { const pk = pinchPoint(frame, src); if (pk) { const ps = M4.pt(XR_MI, pk); kelp.move(kg.c, ps[0] + kg.off[0], ps[2] + kg.off[1]); } }
@@ -3052,7 +3130,7 @@ async function boot() {
     new ResizeObserver(resize).observe(stage);
     setupXR(); console.log('boot ok', Math.round(performance.now()), fmt);
     lastT = performance.now(); requestAnimationFrame(frame);
-    window.__jelly = { lure, world: () => world, krill: () => krill, ST, A, cam, snapshot, setAR: v => { xrS = v ? { ar: true } : null; }, panelCompile: async () => { const m = device.createShaderModule({ code: WGSL_PANEL }); const i = await m.getCompilationInfo(); return i.messages.map(x => x.type + ':' + x.message + '@' + x.lineNum); } };
+    window.__jelly = { lure, jf: () => jf, world: () => world, krill: () => krill, ST, A, cam, snapshot, setAR: v => { xrS = v ? { ar: true } : null; }, panelCompile: async () => { const m = device.createShaderModule({ code: WGSL_PANEL }); const i = await m.getCompilationInfo(); return i.messages.map(x => x.type + ':' + x.message + '@' + x.lineNum); } };
   } catch (e) { console.error(e); $('nogpu').style.display = 'flex'; $('nogpu').firstElementChild.textContent = 'Could not start WebGPU: ' + e.message; initUI(); }
 }
 boot();
