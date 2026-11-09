@@ -168,7 +168,7 @@ body.ph #ph{display:block}
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v15 - 11-09_00:35Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v16 - 11-09_00:59Z</p>
  </aside>
 </div>
 
@@ -250,7 +250,7 @@ function makeFin(o) {
   const N = o.flat ? [0, 1, 0] : nrm3(cross3(S, Cd));
   return Object.assign({ tau0: 0.040, tauTip: 0.021 }, o, { S, Cd, N });
 }
-function finSdf(f, x, y, z) {
+function finSdf(f, x, y, z, tk = 1, tmin = 0) {
   const rx = x - f.O[0], ry = y - f.O[1], rz = z - f.O[2];
   const q = rx * f.S[0] + ry * f.S[1] + rz * f.S[2];
   const p = rx * f.Cd[0] + ry * f.Cd[1] + rz * f.Cd[2];
@@ -261,7 +261,7 @@ function finSdf(f, x, y, z) {
   const sT = (q > 0 && q < f.Sp) ? (f.tipP - f.C) * 2 * (1 - eta) / f.Sp : 0;
   const dL = (pL - p) / Math.sqrt(1 + sL * sL), dT = (p - pT) / Math.sqrt(1 + sT * sT);
   const d2 = Math.max(dL, dT, q - f.Sp, -q - 0.05);
-  const tau = f.tauTip + (f.tau0 - f.tauTip) * Math.pow(1 - eta, 1.2);
+  const tau = Math.max(tmin, (f.tauTip + (f.tau0 - f.tauTip) * Math.pow(1 - eta, 1.2)) * tk);
   if (f.flat) n = y - tau;
   const dn = Math.abs(n) - tau;
   return Math.min(Math.max(d2, dn), 0) + Math.hypot(Math.max(d2, 0), Math.max(dn, 0));
@@ -285,9 +285,28 @@ const FINS = [
   { name: 'tailLo', O: [2.76, 0.0, 0], S: [1, 0.10, 0], Cd: [0, 1, 0], Sp: 0.40, C: 0.19, tipP: 0.12 },
 ].map(makeFin);
 
+// render surface: thin, elegant fins and a clean terminal mouth (the lattice below only drives it)
+function sdfRender(a, y, z) {
+  let d = bodySdf(a, y, z), df = 1e9;
+  for (let i = 0; i < FINS.length; i++) { const v = finSdf(FINS[i], a, y, z, 0.55, 0.0125); if (v < df) df = v; }
+  d = smin(d, df, 0.03);
+  const u = (a - MOUTH.c[0]) / MOUTH.r[0], w = z / MOUTH.r[2];
+  const dm = smax((Math.hypot(u, w) - 1) * 0.16, Math.abs(y - YM) - 0.5 * H, 0.012);
+  d = smax(d, -dm, 0.006);
+  return Math.max(d, -y);
+}
+function sdfCore(a, y, z) { // inner milky gel core (belly side), body only
+  const P = profileAt(a);
+  let d = bodySdf(a, y, z) + 0.05;
+  d = smax(d, y - 0.46 * P.Ht, 0.05); d = smax(d, 0.14 - a, 0.05); d = smax(d, a - 2.55, 0.05);
+  const u = (a - MOUTH.c[0]) / MOUTH.r[0], w = z / MOUTH.r[2];
+  d = smax(d, -((Math.hypot(u, w) - 1) * 0.16 - 0.05), 0.03);
+  return d;
+}
+
 function sdfAll(a, y, z) {
   let d = bodySdf(a, y, z), df = 1e9;
-  for (let i = 0; i < FINS.length; i++) { const v = finSdf(FINS[i], a, y, z); if (v < df) df = v; }
+  for (let i = 0; i < FINS.length; i++) { const v = finSdf(FINS[i], a, y, z, 1, 0.02); if (v < df) df = v; }
   d = smin(d, df, 0.035);
   d = smax(d, -mouthSdf(a, y, z), 0.01);
   return Math.max(d, -y);
@@ -312,7 +331,7 @@ function buildLattice() {
   for (let k = 0; k < NZ; k++) for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
     const x = cx(i), y = cy(j), z = cz(k), id = cIdx(i, j, k);
     const d = sdfAll(x, y, z); sd[id] = d;
-    let ok = d < 0.16 * H;
+    let ok = d < 0.30 * H;
     if (j === JM) { const u = (x - MOUTH.c[0]) / MOUTH.r[0], v = z / MOUTH.r[2]; if (u * u + v * v < 1) { ok = false; mouthCell[id] = 1; } }
     inc[id] = ok ? 1 : 0;
     if (ok && bodySdf(x, y, z) > 0.012) fin[id] = 1;
@@ -437,6 +456,149 @@ function buildLattice() {
   return { nv, nt, tet, rest, tri: Uint32Array.from(tri), blob: Uint32Array.from(blob), edges: Uint32Array.from(edges), isBoundary, cavity, tcen, tkm, twj, tgm, tenv, finw };
 }
 
+
+// ---------------------------------------------------------------- embedded render surface
+// Surface Nets on the SDF (fine, smooth), then every vertex is bound to a lattice tet (barycentric) so the soft body skins it.
+function surfaceNets(f, bx0, by0, bz0, nx, ny, nz, h) {
+  const sx = nx + 1, sy = ny + 1, sz = nz + 1, val = new Float32Array(sx * sy * sz), done = new Uint8Array(val.length), idx = (i, j, k) => (k * sy + j) * sx + i;
+  const B = 3, rad = h * B * 0.9 + h * 0.5, near = [], far = [];
+  for (let bk = 0; bk < nz; bk += B) for (let bj = 0; bj < ny; bj += B) for (let bi = 0; bi < nx; bi += B) {
+    const c = f(bx0 + (bi + B * 0.5) * h, by0 + (bj + B * 0.5) * h, bz0 + (bk + B * 0.5) * h);
+    (Math.abs(c) < rad ? near : far).push(bi, bj, bk, c);
+  }
+  for (let q = 0; q < near.length; q += 4) {
+    const bi = near[q], bj = near[q + 1], bk = near[q + 2];
+    for (let k = bk; k <= Math.min(bk + B, nz); k++) for (let j = bj; j <= Math.min(bj + B, ny); j++) for (let i = bi; i <= Math.min(bi + B, nx); i++) {
+      const id = idx(i, j, k); if (done[id]) continue; val[id] = f(bx0 + i * h, by0 + j * h, bz0 + k * h); done[id] = 1;
+    }
+  }
+  for (let q = 0; q < far.length; q += 4) {
+    const bi = far[q], bj = far[q + 1], bk = far[q + 2], c = far[q + 3];
+    for (let k = bk; k <= Math.min(bk + B, nz); k++) for (let j = bj; j <= Math.min(bj + B, ny); j++) for (let i = bi; i <= Math.min(bi + B, nx); i++) { const id = idx(i, j, k); if (!done[id]) val[id] = c; }
+  }
+  const vi = new Int32Array(nx * ny * nz).fill(-1), P = [], cidx = (i, j, k) => (k * ny + j) * nx + i;
+  const E = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+  const cv = new Float32Array(8);
+  for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    let mask = 0;
+    for (let c = 0; c < 8; c++) { const v = val[idx(i + (c & 1), j + ((c >> 1) & 1), k + (c >> 2))]; cv[c] = v; if (v < 0) mask |= 1 << c; }
+    if (mask === 0 || mask === 255) continue;
+    let ax = 0, ay = 0, az = 0, n = 0;
+    for (const e of E) {
+      const a = cv[e[0]], b = cv[e[1]]; if ((a < 0) === (b < 0)) continue;
+      const t = a / (a - b), c0 = e[0], c1 = e[1];
+      ax += (c0 & 1) + ((c1 & 1) - (c0 & 1)) * t; ay += ((c0 >> 1) & 1) + (((c1 >> 1) & 1) - ((c0 >> 1) & 1)) * t; az += (c0 >> 2) + ((c1 >> 2) - (c0 >> 2)) * t; n++;
+    }
+    vi[cidx(i, j, k)] = P.length / 3; P.push(bx0 + (i + ax / n) * h, by0 + (j + ay / n) * h, bz0 + (k + az / n) * h);
+  }
+  const T = [];
+  const quad = (a, b, c, d, flip) => { if (a < 0 || b < 0 || c < 0 || d < 0) return; if (flip) T.push(a, c, b, a, d, c); else T.push(a, b, c, a, c, d); };
+  for (let k = 1; k < nz; k++) for (let j = 1; j < ny; j++) for (let i = 1; i < nx; i++) {
+    const v0 = val[idx(i, j, k)] < 0;
+    if (v0 !== (val[idx(i + 1, j, k)] < 0)) quad(vi[cidx(i, j - 1, k - 1)], vi[cidx(i, j, k - 1)], vi[cidx(i, j, k)], vi[cidx(i, j - 1, k)], !v0);
+    if (v0 !== (val[idx(i, j + 1, k)] < 0)) quad(vi[cidx(i - 1, j, k - 1)], vi[cidx(i - 1, j, k)], vi[cidx(i, j, k)], vi[cidx(i, j, k - 1)], !v0);
+    if (v0 !== (val[idx(i, j, k + 1)] < 0)) quad(vi[cidx(i - 1, j - 1, k)], vi[cidx(i, j - 1, k)], vi[cidx(i, j, k)], vi[cidx(i - 1, j, k)], !v0);
+  }
+  return { P: Float32Array.from(P), T: Uint32Array.from(T) };
+}
+function projectToSdf(f, P, eps, its) {
+  for (let v = 0; v < P.length; v += 3) {
+    let x = P[v], y = P[v + 1], z = P[v + 2];
+    for (let it = 0; it < its; it++) {
+      const d = f(x, y, z); if (Math.abs(d) < 0.0008) break;
+      const gx = f(x + eps, y, z) - f(x - eps, y, z), gy = f(x, y + eps, z) - f(x, y - eps, z), gz = f(x, y, z + eps) - f(x, y, z - eps), gl = (gx * gx + gy * gy + gz * gz) / (4 * eps * eps);
+      if (gl < 1e-9) break; const s = d / gl; x -= gx / (2 * eps) * s; y -= gy / (2 * eps) * s; z -= gz / (2 * eps) * s;
+    }
+    P[v] = x; P[v + 1] = Math.max(0, y); P[v + 2] = z;
+  }
+}
+function smoothMesh(P, T, f, passes, lam) {
+  const n = P.length / 3, acc = new Float32Array(P.length), cnt = new Uint16Array(n);
+  for (let p = 0; p < passes; p++) {
+    acc.fill(0); cnt.fill(0);
+    for (let t = 0; t < T.length; t += 3) for (let e = 0; e < 3; e++) {
+      const a = T[t + e], b = T[t + (e + 1) % 3];
+      acc[3 * a] += P[3 * b]; acc[3 * a + 1] += P[3 * b + 1]; acc[3 * a + 2] += P[3 * b + 2]; cnt[a]++; acc[3 * b] += P[3 * a]; acc[3 * b + 1] += P[3 * a + 1]; acc[3 * b + 2] += P[3 * a + 2]; cnt[b]++;
+    }
+    for (let v = 0; v < n; v++) if (cnt[v]) for (let c = 0; c < 3; c++) P[3 * v + c] += (acc[3 * v + c] / cnt[v] - P[3 * v + c]) * lam;
+    projectToSdf(f, P, 0.003, 1);
+  }
+}
+function orientOutward(P, T, f) { // make triangle winding agree with the SDF gradient
+  let good = 0, bad = 0;
+  for (let t = 0; t < T.length; t += 3) {
+    if ((t / 3) % 7) continue; const a = T[t] * 3, b = T[t + 1] * 3, c = T[t + 2] * 3;
+    const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2], vx = P[c] - P[a], vy = P[c + 1] - P[a + 1], vz = P[c + 2] - P[a + 2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, mx = (P[a] + P[b] + P[c]) / 3, my = (P[a + 1] + P[b + 1] + P[c + 1]) / 3, mz = (P[a + 2] + P[b + 2] + P[c + 2]) / 3, e = 0.004;
+    const gx = f(mx + e, my, mz) - f(mx - e, my, mz), gy = f(mx, my + e, mz) - f(mx, my - e, mz), gz = f(mx, my, mz + e) - f(mx, my, mz - e);
+    if (nx * gx + ny * gy + nz * gz > 0) good++; else bad++;
+  }
+  if (bad > good) for (let t = 0; t < T.length; t += 3) { const q = T[t + 1]; T[t + 1] = T[t + 2]; T[t + 2] = q; }
+}
+function bindMesh(P, L, H0) {
+  const nvm = P.length / 3, { tet, rest, nt } = L, ginv = 1 / H0, bucket = new Map(), key = (i, j, k) => (i + 512) * 1048576 + (j + 512) * 1024 + (k + 512);
+  const Binv = new Float32Array(nt * 9);
+  for (let t = 0; t < nt; t++) {
+    const a = tet[4 * t] * 3, b = tet[4 * t + 1] * 3, c = tet[4 * t + 2] * 3, d = tet[4 * t + 3] * 3;
+    const m = [rest[b] - rest[a], rest[c] - rest[a], rest[d] - rest[a], rest[b + 1] - rest[a + 1], rest[c + 1] - rest[a + 1], rest[d + 1] - rest[a + 1], rest[b + 2] - rest[a + 2], rest[c + 2] - rest[a + 2], rest[d + 2] - rest[a + 2]];
+    const det = m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]), id = 1 / det;
+    Binv.set([(m[4] * m[8] - m[5] * m[7]) * id, (m[2] * m[7] - m[1] * m[8]) * id, (m[1] * m[5] - m[2] * m[4]) * id, (m[5] * m[6] - m[3] * m[8]) * id, (m[0] * m[8] - m[2] * m[6]) * id, (m[2] * m[3] - m[0] * m[5]) * id, (m[3] * m[7] - m[4] * m[6]) * id, (m[1] * m[6] - m[0] * m[7]) * id, (m[0] * m[4] - m[1] * m[3]) * id], 9 * t);
+    let x0 = 1e9, y0 = 1e9, z0 = 1e9, x1 = -1e9, y1 = -1e9, z1 = -1e9;
+    for (let q = 0; q < 4; q++) { const v = tet[4 * t + q] * 3; x0 = Math.min(x0, rest[v]); y0 = Math.min(y0, rest[v + 1]); z0 = Math.min(z0, rest[v + 2]); x1 = Math.max(x1, rest[v]); y1 = Math.max(y1, rest[v + 1]); z1 = Math.max(z1, rest[v + 2]); }
+    for (let k = Math.floor(z0 * ginv); k <= Math.floor(z1 * ginv); k++) for (let j = Math.floor(y0 * ginv); j <= Math.floor(y1 * ginv); j++) for (let i = Math.floor(x0 * ginv); i <= Math.floor(x1 * ginv); i++) { const kk = key(i, j, k); let l = bucket.get(kk); if (!l) bucket.set(kk, l = []); l.push(t); }
+  }
+  const bi = new Int32Array(nvm * 4), bw = new Float32Array(nvm * 4);
+  for (let v = 0; v < nvm; v++) {
+    const px = P[3 * v], py = P[3 * v + 1], pz = P[3 * v + 2], ci = Math.floor(px * ginv), cj = Math.floor(py * ginv), ck = Math.floor(pz * ginv);
+    let best = -1, bs = -1e9, bl = null;
+    for (let r = 0; r < 4 && best < 0; r++) {
+      for (let k = ck - r; k <= ck + r; k++) for (let j = cj - r; j <= cj + r; j++) for (let i = ci - r; i <= ci + r; i++) {
+        if (r > 0 && Math.max(Math.abs(i - ci), Math.abs(j - cj), Math.abs(k - ck)) < r) continue;
+        const l = bucket.get(key(i, j, k)); if (!l) continue;
+        for (const t of l) {
+          const a = tet[4 * t] * 3, dx = px - rest[a], dy = py - rest[a + 1], dz = pz - rest[a + 2], o = 9 * t;
+          const l1 = Binv[o] * dx + Binv[o + 1] * dy + Binv[o + 2] * dz, l2 = Binv[o + 3] * dx + Binv[o + 4] * dy + Binv[o + 5] * dz, l3 = Binv[o + 6] * dx + Binv[o + 7] * dy + Binv[o + 8] * dz, l0 = 1 - l1 - l2 - l3;
+          const sc = Math.min(l0, l1, l2, l3); if (sc > bs) { bs = sc; best = t; bl = [l0, l1, l2, l3]; }
+        }
+      }
+      if (best >= 0 && bs < -0.5) best = -1; // too far: widen the search
+    }
+    if (best < 0) { // fall back: nearest tet centroid
+      let bd = 1e18; for (let t = 0; t < nt; t++) { const d = (L.tcen[3 * t] - px) ** 2 + (L.tcen[3 * t + 1] - py) ** 2 + (L.tcen[3 * t + 2] - pz) ** 2; if (d < bd) { bd = d; best = t; } }
+      const a = tet[4 * best] * 3, dx = px - rest[a], dy = py - rest[a + 1], dz = pz - rest[a + 2], o = 9 * best;
+      const l1 = Binv[o] * dx + Binv[o + 1] * dy + Binv[o + 2] * dz, l2 = Binv[o + 3] * dx + Binv[o + 4] * dy + Binv[o + 5] * dz, l3 = Binv[o + 6] * dx + Binv[o + 7] * dy + Binv[o + 8] * dz; bl = [1 - l1 - l2 - l3, l1, l2, l3];
+    }
+    let sw = 0; for (let q = 0; q < 4; q++) { bl[q] = Math.max(bl[q], -0.45); sw += bl[q]; }
+    for (let q = 0; q < 4; q++) { bi[4 * v + q] = tet[4 * best + q]; bw[4 * v + q] = bl[q] / sw; }
+  }
+  return { bi, bw };
+}
+function buildEmbedded(L, h, f, projIts, smoothPasses) {
+  const bx0 = -0.16, by0 = -2 * h, bz0 = -0.95, nx = Math.ceil(3.75 / h), ny = Math.ceil(0.95 / h), nz = Math.ceil(1.9 / h);
+  const m = surfaceNets(f, bx0, by0, bz0, nx, ny, nz, h);
+  projectToSdf(f, m.P, 0.003, projIts); if (smoothPasses) smoothMesh(m.P, m.T, f, smoothPasses, 0.35);
+  orientOutward(m.P, m.T, f);
+  const bind = bindMesh(m.P, L, H);
+  return { nv: m.P.length / 3, rest: m.P, tri: m.T, bi: bind.bi, bw: bind.bw };
+}
+function skinMesh(M, pos, out) {
+  const { bi, bw } = M, n = M.nv;
+  for (let v = 0; v < n; v++) {
+    const o = 4 * v, a = bi[o] * 3, b = bi[o + 1] * 3, c = bi[o + 2] * 3, d = bi[o + 3] * 3, w0 = bw[o], w1 = bw[o + 1], w2 = bw[o + 2], w3 = bw[o + 3];
+    out[3 * v] = w0 * pos[a] + w1 * pos[b] + w2 * pos[c] + w3 * pos[d]; out[3 * v + 1] = w0 * pos[a + 1] + w1 * pos[b + 1] + w2 * pos[c + 1] + w3 * pos[d + 1]; out[3 * v + 2] = w0 * pos[a + 2] + w1 * pos[b + 2] + w2 * pos[c + 2] + w3 * pos[d + 2];
+  }
+}
+function meshNormals(P, T, out) {
+  out.fill(0);
+  for (let i = 0; i < T.length; i += 3) {
+    const a = T[i] * 3, b = T[i + 1] * 3, c = T[i + 2] * 3;
+    const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2], vx = P[c] - P[a], vy = P[c + 1] - P[a + 1], vz = P[c + 2] - P[a + 2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    out[a] += nx; out[a + 1] += ny; out[a + 2] += nz; out[b] += nx; out[b + 1] += ny; out[b + 2] += nz; out[c] += nx; out[c + 1] += ny; out[c + 2] += nz;
+  }
+  for (let i = 0; i < out.length; i += 3) { const l = Math.hypot(out[i], out[i + 1], out[i + 2]); if (l > 1e-12) { out[i] /= l; out[i + 1] /= l; out[i + 2] /= l; } }
+}
+
 // ---------------------------------------------------------------- world
 function createWorld(cell) {
   H = cell || 0.04;
@@ -477,6 +639,11 @@ function createWorld(cell) {
   const eyeV = [nearest(eyeP[0], eyeP[1], eyeP[2], v => outer[v] && !L.cavity.has(v)), nearest(eyeP[0], eyeP[1], -eyeP[2], v => outer[v] && !L.cavity.has(v))];
   const surfV = []; for (let v = 0; v < nv; v++) if (outer[v]) surfV.push(v);
   const nrm = new Float32Array(nv * 3), bnrm = new Float32Array(nv * 3);
+  const RES = H >= 0.055 ? 0.024 : 0.019;
+  const R = buildEmbedded(L, RES, sdfRender, 2, 1), Bm = buildEmbedded(L, 0.034, sdfCore, 1, 1);
+  R.pos = new Float32Array(R.nv * 3); R.nrm = new Float32Array(R.nv * 3); Bm.pos = new Float32Array(Bm.nv * 3); Bm.nrm = new Float32Array(Bm.nv * 3);
+  R.rest4 = new Float32Array(R.nv * 4); for (let v = 0; v < R.nv; v++) { R.rest4[4 * v] = R.rest[3 * v]; R.rest4[4 * v + 1] = R.rest[3 * v + 1]; R.rest4[4 * v + 2] = R.rest[3 * v + 2]; R.rest4[4 * v + 3] = smooth(0.012, 0.045, bodySdf(R.rest[3 * v], R.rest[3 * v + 1], R.rest[3 * v + 2])); }
+  const skin = () => { skinMesh(R, pos, R.pos); meshNormals(R.pos, R.tri, R.nrm); skinMesh(Bm, pos, Bm.pos); meshNormals(Bm.pos, Bm.tri, Bm.nrm); };
 
   function computeNormals(idx, out) {
     out.fill(0);
@@ -779,7 +946,7 @@ function createWorld(cell) {
   }
   const endGrab = (id = 0) => { if (id < 0) grabs.clear(); else grabs.delete(id); };
   const totalMassG = 1.05 * totalV * 1000;
-  return { L, S, YM, MOUTH, H, nv, nt, pos, vel, nrm, bnrm, computeNormals, step, reset, volumeRatio, gapeMM, mouthFrame, pickVertex, beginGrab, moveGrab, endGrab, setColliders, cols: () => ({ a: col, n: ncol }), eyeP, spirP, eyeV, totalMassG, totalV, P, surfV };
+  return { L, S, YM, MOUTH, H, nv, nt, pos, vel, nrm, bnrm, computeNormals, R, B: Bm, skin, step, reset, volumeRatio, gapeMM, mouthFrame, pickVertex, beginGrab, moveGrab, endGrab, setColliders, cols: () => ({ a: col, n: ncol }), eyeP, spirP, eyeV, totalMassG, totalV, P, surfV };
 }
 
 // ---------------------------------------------------------------- krill (rigid elongated beads)
@@ -1365,16 +1532,17 @@ fn markings(p0: vec3<f32>, finw: f32, nrm: vec3<f32>, pf: f32) -> Mk {
   let seg = floor(th * R / 0.065);
   let hbrk = step(0.2, hsh(vec2<f32>(j * 3.7 + 11.0, seg)));
   let inBand = smoothstep(0.62, 0.78, a) * (1.0 - smoothstep(2.62, 2.78, a)) * (1.0 - smoothstep(2.0, 2.35, ath)) * bodyW;
-  let hoops = aa(dh, 0.0032, pf) * hbrk * inBand;
+  let hoops = aa(dh, 0.0026, pf) * hbrk * inBand * 0.75;
   let aC = (j + 0.5) * D;
-  let dA = a - aC;
+  let jx = (hsh(vec2<f32>(j*1.3+4.0, floor(ath*7.0))) - 0.5) * 0.045;
+  let dA = a - aC - jx;
   let dv0 = abs(ath - 0.0) * R;
   let dv1 = abs(ath - 0.47) * R;
   let dv2 = abs(ath - 0.82) * R;
   let dv3 = abs(ath - 1.30) * R;
   let dv4 = abs(ath - 1.90) * R;
   let dv = min(min(dv0, dv1), min(min(dv2, dv3), dv4));
-  let rs = 0.0165 * clamp(R / 0.16, 0.5, 1.2) * (0.8 + 0.4 * hsh(vec2<f32>(j, floor(ath * 5.0))));
+  let rs = 0.0165 * clamp(R / 0.16, 0.5, 1.2) * (0.65 + 0.8 * hsh(vec2<f32>(j, floor(ath * 5.0))));
   let spotD = length(vec2<f32>(dA, dv));
   let spots = aa(spotD, rs, pf) * inBand * (1.0 - smoothstep(1.7, 2.1, ath));
   let spotHalo = exp(-(spotD / (rs * 2.4)) * (spotD / (rs * 2.4))) * inBand;
@@ -1427,7 +1595,7 @@ fn markings(p0: vec3<f32>, finw: f32, nrm: vec3<f32>, pf: f32) -> Mk {
   let eyeDark = aa(de, 0.046, pf);
   let eyeRing = aa(de, 0.060, pf) - aa(de, 0.052, pf);
   m.pigOp = max(m.pigOp, eyeDark * 0.97);
-  m.pale = max(m.pale, eyeRing * 0.8);
+  m.pale = max(m.pale, eyeRing * 0.0);
   let sA = g.spirP.xyz;
   let sB = vec3<f32>(sA.x, sA.y, -sA.z);
   let ds = min(length(p0 - sA), length(p0 - sB));
@@ -1721,7 +1889,7 @@ function destroyVR(vr) { for (const k of ['scene', 'back', 'sceneD', 'backD']) v
 
 const VBU = GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST, IBU = GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST;
 function loadWorld(cell) {
-  if (buf.pos) for (const k of ['pos', 'nrm', 'bnrm', 'rest', 'tri', 'blob', 'edge']) buf[k].destroy();
+  if (buf.pos) for (const k of ['pos', 'nrm', 'bnrm', 'rest', 'tri', 'blob', 'edge', 'rpos', 'rnrm', 'rrest', 'rtri', 'bpos2', 'bnrm2', 'btri']) buf[k].destroy();
   world = createWorld(cell); krill = createKrill(world); kelp = createKelp(world);
   const nv = world.nv, L = world.L;
   buf.pos = device.createBuffer({ size: nv * 12, usage: VBU }); buf.nrm = device.createBuffer({ size: nv * 12, usage: VBU }); buf.bnrm = device.createBuffer({ size: nv * 12, usage: VBU });
@@ -1731,12 +1899,18 @@ function loadWorld(cell) {
   const mkI = (a) => { const b = device.createBuffer({ size: Math.max(16, (a.byteLength + 3) & ~3), usage: IBU }); device.queue.writeBuffer(b, 0, a); return b; };
   buf.tri = mkI(L.tri); buf.blob = mkI(L.blob); buf.edge = mkI(L.edges);
   buf.nTri = L.tri.length; buf.nBlob = L.blob.length; buf.nEdge = L.edges.length;
+  const Rm = world.R, Bm = world.B;
+  buf.rpos = device.createBuffer({ size: Rm.nv * 12, usage: VBU }); buf.rnrm = device.createBuffer({ size: Rm.nv * 12, usage: VBU }); buf.rrest = device.createBuffer({ size: Rm.nv * 16, usage: VBU });
+  device.queue.writeBuffer(buf.rrest, 0, Rm.rest4); buf.rtri = mkI(Rm.tri); buf.nRTri = Rm.tri.length;
+  buf.bpos2 = device.createBuffer({ size: Bm.nv * 12, usage: VBU }); buf.bnrm2 = device.createBuffer({ size: Bm.nv * 12, usage: VBU }); buf.btri = mkI(Bm.tri); buf.nBTri = Bm.tri.length;
   world.S.nsub = ST.nsub;
   uploadDynamic();
 }
 function uploadDynamic() {
-  world.computeNormals(world.L.tri, world.nrm); world.computeNormals(world.L.blob, world.bnrm);
-  device.queue.writeBuffer(buf.pos, 0, world.pos); device.queue.writeBuffer(buf.nrm, 0, world.nrm); device.queue.writeBuffer(buf.bnrm, 0, world.bnrm);
+  world.skin();
+  device.queue.writeBuffer(buf.rpos, 0, world.R.pos); device.queue.writeBuffer(buf.rnrm, 0, world.R.nrm);
+  device.queue.writeBuffer(buf.bpos2, 0, world.B.pos); device.queue.writeBuffer(buf.bnrm2, 0, world.B.nrm);
+  if (ST.mesh) device.queue.writeBuffer(buf.pos, 0, world.pos);
 }
 
 // ---------------------------------------------------------------- timeline + sim
@@ -1825,12 +1999,12 @@ function updateInstances() {
 
 // ---------------------------------------------------------------- encode
 const DBG = new Set((location.hash || '').slice(1).split(',').filter(Boolean));
-function drawJelly(p) { p.setVertexBuffer(0, buf.pos); p.setVertexBuffer(1, buf.nrm); p.setVertexBuffer(2, buf.rest); p.setIndexBuffer(buf.tri, 'uint32'); p.drawIndexed(buf.nTri); }
+function drawJelly(p) { p.setVertexBuffer(0, buf.rpos); p.setVertexBuffer(1, buf.rnrm); p.setVertexBuffer(2, buf.rrest); p.setIndexBuffer(buf.rtri, 'uint32'); p.drawIndexed(buf.nRTri); }
 function encodeShadows(enc, vr) {
   if (DBG.has('noshadow')) return;
   for (const [tex, pipe, clear] of [[shFv, pipes.shF, 1], [shBv, pipes.shB, 0]]) {
     const p = enc.beginRenderPass({ colorAttachments: [], depthStencilAttachment: { view: tex, depthClearValue: clear, depthLoadOp: 'clear', depthStoreOp: 'store' } });
-    p.setPipeline(pipe); p.setBindGroup(0, vr.bgShadow); p.setVertexBuffer(0, buf.pos); p.setIndexBuffer(buf.tri, 'uint32'); p.drawIndexed(buf.nTri); p.end();
+    p.setPipeline(pipe); p.setBindGroup(0, vr.bgShadow); p.setVertexBuffer(0, buf.rpos); p.setIndexBuffer(buf.rtri, 'uint32'); p.drawIndexed(buf.nRTri); p.end();
   }
 }
 function encodeView(enc, vr, colorView, nInst, viewport) {
@@ -1838,11 +2012,11 @@ function encodeView(enc, vr, colorView, nInst, viewport) {
   let p = enc.beginRenderPass({ colorAttachments: [{ view: vr.sceneV, clearValue: { r: bg[0], g: bg[1], b: bg[2], a: ((xrS && xrS.ar) || PHN.on) ? 0 : 1 }, loadOp: 'clear', storeOp: 'store' }], depthStencilAttachment: { view: vr.sceneDV, depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' } });
   p.setBindGroup(0, vr.bgScene);
   if (!DBG.has('nofloor')) { p.setPipeline(pipes.floor); p.draw(3); }
-  if (!DBG.has('noblob')) { p.setPipeline(pipes.blob); p.setVertexBuffer(0, buf.pos); p.setVertexBuffer(1, buf.bnrm); p.setIndexBuffer(buf.blob, 'uint32'); p.drawIndexed(buf.nBlob); }
+  if (!DBG.has('noblob')) { p.setPipeline(pipes.blob); p.setVertexBuffer(0, buf.bpos2); p.setVertexBuffer(1, buf.bnrm2); p.setIndexBuffer(buf.btri, 'uint32'); p.drawIndexed(buf.nBTri); }
   if (!DBG.has('nobead')) { p.setPipeline(pipes.bead); p.setVertexBuffer(0, buf.sphV); p.setVertexBuffer(1, buf.inst); p.setIndexBuffer(buf.sphI, 'uint32'); p.drawIndexed(buf.sphN, nInst); }
   p.end();
   p = enc.beginRenderPass({ colorAttachments: [{ view: vr.backV, clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: 'clear', storeOp: 'store' }], depthStencilAttachment: { view: vr.backDV, depthClearValue: 0, depthLoadOp: 'clear', depthStoreOp: 'store' } });
-  if (!DBG.has('noback')) { p.setBindGroup(0, vr.bgBack); p.setPipeline(pipes.back); p.setVertexBuffer(0, buf.pos); p.setIndexBuffer(buf.tri, 'uint32'); p.drawIndexed(buf.nTri); } p.end();
+  if (!DBG.has('noback')) { p.setBindGroup(0, vr.bgBack); p.setPipeline(pipes.back); p.setVertexBuffer(0, buf.rpos); p.setIndexBuffer(buf.rtri, 'uint32'); p.drawIndexed(buf.nRTri); } p.end();
   p = enc.beginRenderPass({ colorAttachments: [{ view: colorView, clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: viewport ? 'load' : 'clear', storeOp: 'store' }], depthStencilAttachment: { view: vr.sceneDV, depthLoadOp: 'load', depthStoreOp: 'store' } });
   if (viewport) { p.setViewport(viewport.x, viewport.y, viewport.width, viewport.height, 0, 1); p.setScissorRect(viewport.x, viewport.y, viewport.width, viewport.height); }
   p.setBindGroup(0, vr.bgMain);
