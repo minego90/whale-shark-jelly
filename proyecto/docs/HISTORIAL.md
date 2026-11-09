@@ -1,5 +1,6 @@
 # Historial de versiones (git, más reciente primero)
 
+- **2026-11-09** — v36: panel XR se toca con el dedo y se mueve con pinch en una barra inferior
 - **2026-11-09** — v35: Scatter krill suelta menos (60, luego 35–49) y solo cuando se comió la tanda anterior
 - **2026-11-09** — v34: onda de color más visible (también en tentáculos), colisión de dedos barrida para que no atraviesen las medusas
 - **2026-11-09** — v33: medusas se quedan quietas donde están al apagar Swim (pulsan en su sitio solo con Swish tail)

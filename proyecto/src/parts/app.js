@@ -492,7 +492,7 @@ function bindPointer() {
 // ---------------------------------------------------------------- WebXR (WebGPU binding): VR + AR placement + floating menu + hand pinch
 let xrS = null, panelRes = null; const xrErrs = []; let fmt0 = null;
 function setFmt(f) { for (const v of vrs) if (v) destroyVR(v); vrs = []; fmt = f; initPipelines(); panelRes = null; resize(); }
-const PNW = 640, PNH = 1296, PIW = 720, PIH = 380;
+const PNW = 640, PNH = 1400, BAR_Y = 1306, BAR_H = 34, PIW = 720, PIH = 380;
 const stepItem = (label, y, get, set, extra = {}) => Object.assign({ kind: 'stepper', label, x: 28, y, w: 584, h: 70, get, set }, extra);
 const sizeItem = y => stepItem('Size', y, () => (xrS.pl.scale - 0.06) / 0.24, v => { xrS.pl.scale = 0.06 + v * 0.24; applyPlace(xrS.pl); });
 const turnItem = y => stepItem('Turn', y, () => (((xrS.pl.yaw / (2 * Math.PI)) % 1) + 1) % 1, v => { xrS.pl.yaw = v * 2 * Math.PI; applyPlace(xrS.pl); }, { step: 1 / 12, wrap: true });
@@ -529,7 +529,7 @@ function drawPanel(hover) {
   const ink = dk ? '#e9eef0' : '#14212b', mute = dk ? '#8fa1ab' : '#5b6b75';
   g2.fillStyle = ink; g2.font = 'italic 46px Georgia, serif'; g2.fillText('Whale Shark Jelly.', 28, 54);
   g2.font = '600 17px system-ui, sans-serif'; g2.fillStyle = mute;
-  g2.fillText('drag this title to move the board', 28, 76);
+  g2.fillText('drag the title or the bar below to move the board', 28, 76);
   if (place) {
     g2.fillStyle = ink; g2.font = '600 30px system-ui'; g2.fillText(s.ret.ok ? 'Surface found' : 'Looking for a surface…', 28, 150);
     g2.fillStyle = s.ret.ok ? w.accent : mute; g2.beginPath(); g2.arc(600, 138, 12, 0, 7); g2.fill();
@@ -537,7 +537,11 @@ function drawPanel(hover) {
     ['Point at a table or the floor.', s.noHT ? 'No hit-test here: it lands on the floor in front of you.' : 'The shark follows your pointer.', 'Pinch (or squeeze the trigger) to place it.', 'Then the board stays at its side.'].forEach((t, i) => g2.fillText(t, 28, 200 + i * 34));
   }
   g2.font = '500 15px system-ui'; g2.fillStyle = xrErrs.length ? '#c0392b' : mute;
-  g2.fillText((place ? s.diag : s.diag + ' · ' + s.frames + 'f · walls ' + (s.nPlanes || 0)) + (xrErrs.length ? ' · ' + xrErrs[xrErrs.length - 1] : ''), 28, place ? 584 : PNH - 16, 584);
+  g2.fillText((place ? s.diag : s.diag + ' · ' + s.frames + 'f · walls ' + (s.nPlanes || 0)) + (xrErrs.length ? ' · ' + xrErrs[xrErrs.length - 1] : ''), 28, place ? 584 : PNH - 10, 584);
+  if (!place) { // grab bar: pinch it (or point + pinch) to move the board
+    g2.fillStyle = s.pgrab ? w.accent : 'rgba(233,238,240,0.55)'; g2.beginPath(); g2.roundRect(PNW / 2 - 150, BAR_Y, 300, BAR_H, BAR_H / 2); g2.fill();
+    g2.fillStyle = mute; g2.font = '600 16px system-ui'; g2.textAlign = 'center'; g2.fillText('pinch here to move · tap buttons with a finger', PNW / 2, BAR_Y + BAR_H + 22); g2.textAlign = 'left';
+  }
   s.items.forEach((it, idx) => {
     const hov = hover === idx; g2.lineWidth = 3;
     if (it.kind === 'way') { g2.fillStyle = WAYS[it.i].sw; g2.strokeStyle = ST.way === it.i ? ink : 'rgba(0,0,0,0)'; g2.beginPath(); g2.roundRect(it.x, it.y, it.w, it.h, 18); g2.fill(); g2.stroke(); g2.fillStyle = '#fff'; g2.font = '700 22px system-ui'; g2.textAlign = 'center'; g2.fillText(it.label, it.x + it.w / 2, it.y + 40); g2.textAlign = 'left'; if (hov) { g2.strokeStyle = '#fff'; g2.strokeRect(it.x, it.y, it.w, it.h); } return; }
@@ -742,6 +746,34 @@ function panelHit(ray) {
   return { t, px, py };
 }
 function itemAt(px, py) { const L = xrS.items; for (let i = 0; i < L.length; i++) { const it = L[i]; if (px >= it.x && px <= it.x + it.w && py >= it.y && py <= it.y + it.h) return i; } return -1; }
+function pressItem(s, i, px) {
+  if (i < 0) return; const it = s.items[i];
+  if (it.kind === 'way') A.way(it.i); else if (it.kind === 'btn') { it.fn(); sync(); } else if (it.kind === 'stepper') { const dir = px < it.x + 300 ? -1 : 1, st = it.step || 0.1; let v = it.get() + dir * st; v = it.wrap ? ((v % 1) + 1) % 1 : clamp(v, 0, 1); it.set(v); }
+  s.dirty = true;
+}
+function panelLocal(p) { // a point in the room -> signed distance in front of the board and texture pixel coords
+  const P = xrS.panelPose; if (!P) return null;
+  const h = [p[0] - P.c[0], p[1] - P.c[1], p[2] - P.c[2]], sd = h[0] * P.n[0] + h[1] * P.n[1] + h[2] * P.n[2];
+  const x = (h[0] * P.r[0] + h[1] * P.r[1] + h[2] * P.r[2]) / P.hw, y = (h[0] * P.u[0] + h[1] * P.u[1] + h[2] * P.u[2]) / P.hh;
+  return { sd, px: (x * 0.5 + 0.5) * PNW, py: (0.5 - y * 0.5) * PNH, inside: Math.abs(x) <= 1 && Math.abs(y) <= 1 };
+}
+function jointPos(frame, src, name) { const j = src.hand && src.hand.get(name); if (!j) return null; const p = frame.getJointPose(j, xrS.ref); if (!p) return null; const q = p.transform.position; return [q.x, q.y, q.z]; }
+// touch the board with a fingertip: press on contact (one press per touch)
+function fingerPanel(frame, s) {
+  if (!s.ftouch) s.ftouch = new Map(); let hov = -1;
+  for (const src of s.session.inputSources) {
+    if (!src.hand) continue; const tip = jointPos(frame, src, 'index-finger-tip'); if (!tip) { s.ftouch.delete(src); continue; }
+    const L = panelLocal(tip), st = s.ftouch.get(src) || { down: false, t: 0 };
+    if (L && L.inside && L.py <= (s.mode === 'place' ? 600 : PNH) && L.sd < 0.05 && L.sd > -0.05) {
+      const i = itemAt(L.px, L.py); if (i >= 0) { hov = i; ptrHoverSide = L.px < s.items[i].x + 300 ? 0 : 1; }
+      const touching = L.sd < 0.012;
+      if (touching && !st.down && performance.now() - st.t > 350 && !(s.pgrab && s.pgrab.src === src)) { st.t = performance.now(); pressItem(s, i, L.px); }
+      st.down = touching ? true : (L.sd > 0.025 ? false : st.down);
+    } else st.down = false;
+    s.ftouch.set(src, st);
+  }
+  return hov;
+}
 function freeGrabId(s) { const used = new Set([...s.grabs.values()].map(g => g.id)); let i = 1; while (used.has(i)) i++; return i; }
 function xrSelect(ev, down) {
   const s = xrS; if (!s) return;
@@ -754,11 +786,14 @@ function xrSelect(ev, down) {
     return;
   }
   s.pinch.add(src);
+  { const pk = pinchPoint(frame, src), L = pk && panelLocal(pk); // pinch the bar under the board to carry it
+    if (L && Math.abs(L.sd) < 0.06 && L.px > -30 && L.px < PNW + 30 && ((L.py > BAR_Y - 40 && L.py < BAR_Y + BAR_H + 50) || L.py < 90)) { const P = s.panelPose; s.pgrab = { src, direct: true, off: [P.c[0] - pk[0], P.c[1] - pk[1], P.c[2] - pk[2]] }; return; } }
   const ph = panelHit(ray);
   if (ph) { // click on the board (title bar drags it)
     if (ph.py < 90) { s.pgrab = { src, dist: ph.t }; return; }
     const i = itemAt(ph.px, ph.py);
-    if (i >= 0) { const it = s.items[i]; if (it.kind === 'way') A.way(it.i); else if (it.kind === 'btn') { it.fn(); sync(); } else if (it.kind === 'stepper') { const dir = ph.px < it.x + 300 ? -1 : 1, st = it.step || 0.1; let v = it.get() + dir * st; v = it.wrap ? ((v % 1) + 1) % 1 : clamp(v, 0, 1); it.set(v); } s.dirty = true; }
+    if (ph.py >= BAR_Y - 14 && ph.py <= BAR_Y + BAR_H + 14) { s.pgrab = { src, dist: ph.t }; return; } // bottom grab bar
+    pressItem(s, i, ph.px);
     return;
   }
   if (s.mode === 'place') { // pinch/trigger anywhere else drops the shark here
@@ -882,7 +917,7 @@ function xrFrameInner(t, frame, s) {
     const ray = rayFromSource(frame, src); if (!ray) continue;
     const hit = panelHit(ray); let len = 1.2;
     if (hit) { len = hit.t; onPanel.add(src); const i = itemAt(hit.px, hit.py); if (i >= 0) { hover = i; ptrHoverSide = hit.px < s.items[i].x + 300 ? 0 : 1; } }
-    if (s.pgrab && s.pgrab.src === src) { const d = s.pgrab.dist; faceEye(s, [ray.ro[0] + ray.rd[0] * d, ray.ro[1] + ray.rd[1] * d, ray.ro[2] + ray.rd[2] * d], eye); }
+    if (s.pgrab && s.pgrab.src === src) { if (s.pgrab.direct) { const pk = pinchPoint(frame, src); if (pk) faceEye(s, [pk[0] + s.pgrab.off[0], pk[1] + s.pgrab.off[1], pk[2] + s.pgrab.off[2]], eye); } else { const d = s.pgrab.dist; faceEye(s, [ray.ro[0] + ray.rd[0] * d, ray.ro[1] + ray.rd[1] * d, ray.ro[2] + ray.rd[2] * d], eye); } }
     const kg = s.kgrabs && s.kgrabs.get(src);
     if (kg && kg.lure) {
       if (!XR_MI) XR_MI = M4.inv(XR_M);
@@ -922,6 +957,7 @@ function xrFrameInner(t, frame, s) {
     if (frameN % 20 === 0) s.dirty = true;
   }
   if (!XR_MI) XR_MI = M4.inv(XR_M);
+  { const fh = fingerPanel(frame, s); if (fh >= 0) hover = fh; }
   if (hover !== s.hover || s.dirty || frameN % 12 === 0) { s.hover = hover; s.dirty = false; drawPanel(hover); }
   buildHandColliders(frame, s); infoPose(s, eye); if (frameN % 12 === 0) drawInfo();
   // hand markers: pinch dots in AR (real hands are visible), full joints in VR
