@@ -154,6 +154,7 @@ body.ph #ph{display:block}
   </div>
   <div class="sec">Material</div>
   <div class="row"><label for="sFirm">Firmness</label><input id="sFirm" type="range" min="0" max="100" value="55"><output id="oFirm">55</output></div>
+  <div class="row"><label for="sSnd">Ocean sound</label><input id="sSnd" type="range" min="0" max="100" value="50"><output id="oSnd">50</output></div>
   <div class="row"><label for="sDamp">Damping</label><input id="sDamp" type="range" min="0" max="100" value="35"><output id="oDamp">35</output></div>
   <div class="tg">
    <label><input type="checkbox" id="cSlow"> ¼ speed</label>
@@ -168,7 +169,7 @@ body.ph #ph{display:block}
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v20 - 11-09_01:33Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v21 - 11-09_01:44Z</p>
   <p class="vrnote" style="opacity:.6;font-size:11px;margin-top:2px">Body shape based on "Model 99A - Whale Shark" by DigitalLife3D (CC BY-NC 4.0)</p>
  </aside>
 </div>
@@ -969,9 +970,9 @@ function createWorld(cell) {
 }
 
 // ---------------------------------------------------------------- krill (rigid elongated beads)
-const KMAX = 260, K_HALF = 0.018, K_R = 0.0125;
+const KPI = 11, KMAX = 260, K_HALF = 0.018, K_R = 0.0125;
 function createKrill(world) {
-  const K = { n: 0, p: new Float32Array(KMAX * 3), q: new Float32Array(KMAX * 4), v: new Float32Array(KMAX * 3), w: new Float32Array(KMAX * 3), shade: new Float32Array(KMAX), eaten: 0, gs: 1, dr: 0, level: 0.5, inst: new Float32Array((KMAX + 2) * 12), grid: null };
+  const K = { n: 0, p: new Float32Array(KMAX * 3), q: new Float32Array(KMAX * 4), v: new Float32Array(KMAX * 3), w: new Float32Array(KMAX * 3), shade: new Float32Array(KMAX), eaten: 0, gs: 1, dr: 0, level: 0.5, inst: new Float32Array((KMAX * KPI + 2) * 12), grid: null };
   const rnd = Math.random;
   K.spawn = (cnt, around) => {
     for (let i = 0; i < cnt; i++) {
@@ -1133,13 +1134,23 @@ function createKrill(world) {
       else if (K.p[3 * k + 1] < -0.5 || !isFinite(K.p[3 * k])) rm(k);
     }
   };
+  // each krill is drawn as a small translucent shrimp: carapace, orange organ, black eyes, curved tail, fan, antenna, legs
+  const KPARTS = [
+    [0.012, 0.001, 0, 0.0145, 0.0105, 0.0095, 4, 0], [0.011, -0.0035, 0, 0.0085, 0.0062, 0.0103, 5, 0],
+    [0.0215, 0.0045, 0.0058, 0.0034, 0.0034, 0.0034, 1, 0], [0.0215, 0.0045, -0.0058, 0.0034, 0.0034, 0.0034, 1, 0],
+    [-0.003, 0.0025, 0, 0.0088, 0.0086, 0.0076, 4, 0], [-0.0115, 0.0045, 0, 0.0078, 0.0068, 0.0060, 4, 0], [-0.0195, 0.0058, 0, 0.0066, 0.0052, 0.0045, 4, 0],
+    [-0.0290, 0.0062, 0, 0.0050, 0.0016, 0.0078, 4, 0],
+    [0.034, 0.002, 0.002, 0.0125, 0.0007, 0.0007, 6, 0], [0.009, -0.0125, 0, 0.0012, 0.0085, 0.0017, 6, 0], [0.0, -0.0115, 0, 0.0012, 0.0078, 0.0017, 6, 0]];
   K.fillInstances = (eyeExt) => {
     const I = K.inst, q = K.q; let n = 0;
-    for (let k = 0; k < K.n; k++, n++) {
-      const o = n * 12;
-      I[o] = K.p[3 * k]; I[o + 1] = K.p[3 * k + 1]; I[o + 2] = K.p[3 * k + 2]; I[o + 3] = 0;
-      I[o + 4] = q[4 * k]; I[o + 5] = q[4 * k + 1]; I[o + 6] = q[4 * k + 2]; I[o + 7] = q[4 * k + 3];
-      I[o + 8] = K_HALF + K_R; I[o + 9] = K_R; I[o + 10] = K_R; I[o + 11] = K.shade[k];
+    for (let k = 0; k < K.n; k++) {
+      const qx = q[4 * k], qy = q[4 * k + 1], qz = q[4 * k + 2], qw = q[4 * k + 3], px = K.p[3 * k], py = K.p[3 * k + 1], pz = K.p[3 * k + 2];
+      for (let m = 0; m < KPI; m++, n++) {
+        const P_ = KPARTS[m], o = n * 12, vx = P_[0], vy = P_[1], vz = P_[2];
+        const tx = 2 * (qy * vz - qz * vy), ty = 2 * (qz * vx - qx * vz), tz = 2 * (qx * vy - qy * vx);
+        I[o] = px + vx + qw * tx + (qy * tz - qz * ty); I[o + 1] = py + vy + qw * ty + (qz * tx - qx * tz); I[o + 2] = pz + vz + qw * tz + (qx * ty - qy * tx); I[o + 3] = P_[6];
+        I[o + 4] = qx; I[o + 5] = qy; I[o + 6] = qz; I[o + 7] = qw; I[o + 8] = P_[3]; I[o + 9] = P_[4]; I[o + 10] = P_[5]; I[o + 11] = K.shade[k];
+      }
     }
     return n;
   };
@@ -1490,14 +1501,18 @@ fn qrot(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
   var pw = 50.0;
   if (i.kind > 0.5) { base = vec3<f32>(0.015, 0.016, 0.02); pw = 220.0; }
   if (i.kind > 1.5) { base = vec3<f32>(0.92, 0.97, 1.0); pw = 60.0; }
-  if (i.kind > 2.5) { base = mix(vec3<f32>(0.015, 0.075, 0.03), vec3<f32>(0.50, 0.80, 0.16), pow(i.shade, 1.15)); pw = 90.0; }
+  if (i.kind > 2.5 && i.kind < 3.5) { base = mix(vec3<f32>(0.015, 0.075, 0.03), vec3<f32>(0.50, 0.80, 0.16), pow(i.shade, 1.15)); pw = 90.0; }
+  if (i.kind > 3.5) { base = mix(vec3<f32>(0.50, 0.68, 0.78), vec3<f32>(0.86, 0.66, 0.56), i.shade); pw = 90.0; }
+  if (i.kind > 4.5) { base = vec3<f32>(0.98, 0.40, 0.12); pw = 70.0; }
+  if (i.kind > 5.5) { base = vec3<f32>(0.62, 0.74, 0.80); pw = 40.0; }
   let sp = pow(max(dot(N, h), 0.0), pw);
   let fres = pow(1.0 - max(dot(N, V), 0.0), 4.0);
   let ao = mix(0.65, 1.0, smoothstep(0.0, 0.05, i.wp.y));
   var col = base * (0.30 + 0.9 * ndl * k) * ao + vec3<f32>(sp * 0.7 * k) + env(reflect(-V, N)) * fres * 0.25;
   if (i.kind < 0.5) { col = col + g.glow.rgb * lu() * 0.25 * i.shade; }
   if (i.kind > 1.5 && i.kind < 2.5) { col = base * (0.55 + 0.45 * ndl) + vec3<f32>(sp * 0.4); }
-  if (i.kind > 2.5) { let tr = pow(1.0 - max(dot(N, V), 0.0), 2.0); col = base * (0.30 + 0.75 * ndl * k) * ao + vec3<f32>(sp * 0.55 * k) + base * tr * 0.55 + g.glow.rgb * lu() * 0.45 * i.shade; }
+  if (i.kind > 3.5) { let rim = pow(1.0 - max(dot(N, V), 0.0), 2.2); col = base * (0.42 + 0.45 * ndl * k) * ao + vec3<f32>(sp * 0.8 * k) + vec3<f32>(0.45, 0.68, 0.85) * rim * 0.45 + env(reflect(-V, N)) * fres * 0.35; if (i.kind > 4.5 && i.kind < 5.5) { col = base * (0.55 + 0.6 * ndl) + vec3<f32>(sp * 0.5) + vec3<f32>(0.25, 0.05, 0.0) * rim; } if (i.kind > 5.5) { col = mix(col, vec3<f32>(0.9, 0.95, 1.0), 0.25); } }
+  if (i.kind > 2.5 && i.kind < 3.5) { let tr = pow(1.0 - max(dot(N, V), 0.0), 2.0); col = base * (0.30 + 0.75 * ndl * k) * ao + vec3<f32>(sp * 0.55 * k) + base * tr * 0.55 + g.glow.rgb * lu() * 0.45 * i.shade; }
   return vec4<f32>(col, 1.0);
 }
 
@@ -1907,7 +1922,7 @@ function initPipelines() {
   buf.sphV = device.createBuffer({ size: sp.length * 4, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST }); device.queue.writeBuffer(buf.sphV, 0, new Float32Array(sp));
   buf.sphI = device.createBuffer({ size: si.length * 4, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST }); device.queue.writeBuffer(buf.sphI, 0, new Uint32Array(si));
   buf.sphN = si.length;
-  buf.inst = device.createBuffer({ size: (KMAX + 3 + 64 + KELP_INST) * 48, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+  buf.inst = device.createBuffer({ size: (KMAX * KPI + 3 + 64 + KELP_INST) * 48, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
 }
 
 function makeVR(w, h) {
@@ -2154,6 +2169,7 @@ function initUI() {
   $('bGulp').onclick = A.gulp; $('bSwish').onclick = A.swish; $('bOcean').onclick = A.ocean; $('bSwim').onclick = A.swim; $('bLure').onclick = A.lure; $('bEyes').onclick = A.eyes; $('bLight').onclick = A.light; $('bKrill').onclick = A.krill; $('bReset').onclick = A.reset;
   $('sFirm').oninput = e => { ST.firm = e.target.value / 100; $('oFirm').textContent = e.target.value; if (xrS) xrS.dirty = true; };
   $('sDamp').oninput = e => { ST.damp = e.target.value / 100; $('oDamp').textContent = e.target.value; if (xrS) xrS.dirty = true; };
+  $('sSnd').oninput = e => { sndSet(e.target.value / 100); $('oSnd').textContent = e.target.value; sndStart(); if (xrS) xrS.dirty = true; };
   $('cSlow').onchange = e => { ST.slow = e.target.checked; if (xrS) xrS.dirty = true; };
   $('cMesh').onchange = e => { ST.mesh = e.target.checked; if (xrS) xrS.dirty = true; };
   $('cPause').onchange = e => { ST.pause = e.target.checked; if (xrS) xrS.dirty = true; };
@@ -2223,6 +2239,7 @@ const VR_ITEMS = (() => {
   const rows = [['Gulp', A.gulp, null], ['Swish tail', A.swish, () => ST.swishT], ['Tuck the eyes', A.eyes, () => !ST.eyeT], ['Light up', A.light, () => ST.luT], ['Ocean gravity', A.ocean, () => ST.ocean], ['Swim', A.swim, () => ST.swim], ['Scatter krill', A.krill, null], ['Reset', A.reset, null]];
   rows.forEach((r, i) => { const col = i % 2, row = (i / 2) | 0; add('btn', r[0], 28 + col * 300, 284, 74, { y: 170 + row * 86, fn: r[1], on: r[2] }); });
   add('stepper', 'Firmness', 28, 584, 70, { y: 526, get: () => ST.firm, set: v => { ST.firm = v; $('sFirm').value = v * 100; $('oFirm').textContent = Math.round(v * 100); } });
+  add('stepper', 'Ocean sound', 28, 584, 70, { y: 1136, get: () => SND.vol, set: v => { sndSet(v); sndStart(); $('sSnd').value = Math.round(v * 100); $('oSnd').textContent = Math.round(v * 100); } });
   add('stepper', 'Damping', 28, 584, 70, { y: 606, get: () => ST.damp, set: v => { ST.damp = v; $('sDamp').value = v * 100; $('oDamp').textContent = Math.round(v * 100); } });
   [['¼ speed', 'slow', 'cSlow'], ['Show mesh', 'mesh', 'cMesh'], ['Pause', 'pause', 'cPause']].forEach((t, i) => add('btn', t[0], 28 + i * 200, 190, 66, { y: 696, on: () => ST[t[1]], fn: () => { ST[t[1]] = !ST[t[1]]; $(t[2]).checked = ST[t[1]]; } }));
   add('btn', 'Follow my food', 328, 284, 66, { y: 772, on: () => ST.lure, fn: A.lure });
@@ -2687,6 +2704,33 @@ async function boot() {
 }
 boot();
 //#endregion
+
+// ---------------------------------------------------------------- ocean ambience (synthesised with WebAudio, volume slider)
+const SND = { ctx: null, master: null, vol: 0.5, started: false };
+function sndStart() {
+  if (SND.started) { if (SND.ctx && SND.ctx.state === 'suspended') SND.ctx.resume(); return; }
+  const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+  SND.started = true;
+  const c = SND.ctx = new AC(), sr = c.sampleRate, len = sr * 8;
+  const mk = (type) => { const b = c.createBuffer(2, len, sr); for (let ch = 0; ch < 2; ch++) { const d = b.getChannelData(ch); let l = 0; for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; if (type === 'brown') { l = (l + 0.02 * w) / 1.02; d[i] = l * 3.5; } else d[i] = w; } } const s = c.createBufferSource(); s.buffer = b; s.loop = true; s.start(); return s; };
+  const m = SND.master = c.createGain(); m.gain.value = SND.vol * SND.vol; m.connect(c.destination);
+  const lfo = (f, depth, target) => { const o = c.createOscillator(), g = c.createGain(); o.frequency.value = f; g.gain.value = depth; o.connect(g); g.connect(target); o.start(); };
+  // deep water rumble
+  { const s = mk('brown'), f = c.createBiquadFilter(), g = c.createGain(); f.type = 'lowpass'; f.frequency.value = 260; g.gain.value = 0.55; s.connect(f); f.connect(g); g.connect(m); lfo(0.05, 0.18, g.gain); }
+  // rolling surf: noise swells with two slow waves
+  { const s = mk('white'), f = c.createBiquadFilter(), g = c.createGain(); f.type = 'lowpass'; f.frequency.value = 1100; f.Q.value = 0.4; g.gain.value = 0.16; s.connect(f); f.connect(g); g.connect(m); lfo(0.11, 0.12, g.gain); lfo(0.067, 0.08, g.gain); lfo(0.09, 380, f.frequency); }
+  // foam hiss on the crest of each wave
+  { const s = mk('white'), f = c.createBiquadFilter(), g = c.createGain(); f.type = 'bandpass'; f.frequency.value = 3200; f.Q.value = 0.5; g.gain.value = 0.035; s.connect(f); f.connect(g); g.connect(m); lfo(0.11, 0.03, g.gain); lfo(0.067, 0.02, g.gain); }
+  // small bubbles now and then
+  const bub = () => {
+    if (c.state === 'running') { const t = c.currentTime, o = c.createOscillator(), g = c.createGain(), f0 = 380 + Math.random() * 700; o.type = 'sine'; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f0 * 2.4, t + 0.09); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0008, t + 0.12); o.connect(g); g.connect(m); o.start(t); o.stop(t + 0.15); }
+    setTimeout(bub, 600 + Math.random() * 3200);
+  };
+  bub();
+}
+function sndSet(v) { SND.vol = Math.max(0, Math.min(1, v)); if (SND.master) SND.master.gain.value = SND.vol * SND.vol; }
+['pointerdown', 'keydown', 'touchstart'].forEach(e => addEventListener(e, sndStart, { passive: true }));
+window.__snd = SND;
 //#region PHONE
 // Camera AR for phones: getUserMedia video behind a transparent canvas, device-orientation camera, tap to place on the
 // floor, a retractable bottom menu, and MediaPipe hand tracking turned into the same hand colliders / pinch grabs as WebXR.
