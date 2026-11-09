@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Whale Shark Jelly. — Material Studies</title>
+<style>
+:root{--bg:#dfe6e8;--ink:#14212b;--mute:#5b6b75;--rule:rgba(20,33,43,.18);--accent:#2a7fbf;--panel:rgba(255,255,255,.55);--serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;--sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+body.dark{--ink:#e9eef0;--mute:#8fa1ab;--rule:rgba(233,238,240,.18);--panel:rgba(255,255,255,.06)}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-text-size-adjust:100%}
+.page{display:grid;grid-template-columns:minmax(0,1fr) 340px;min-height:100svh}
+.stage{position:relative;height:100svh;min-height:520px;overflow:hidden}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+canvas.grabbing{cursor:grabbing}
+.mast{position:absolute;left:clamp(16px,3vw,40px);top:clamp(14px,3vh,34px);pointer-events:none;max-width:70%}
+.kicker{margin:0 0 6px;font:600 11px/1 var(--sans);letter-spacing:.22em;text-transform:uppercase;color:var(--mute)}
+.kicker b{font-weight:600;color:var(--accent);margin-left:.8em}
+h1{margin:0;font:italic 400 clamp(38px,6.2vw,92px)/.92 var(--serif);letter-spacing:-.02em}
+.dek{margin:10px 0 0;font:italic 400 clamp(13px,1.3vw,16px)/1.35 var(--serif);color:var(--mute);max-width:34ch}
+.hint{position:absolute;right:16px;bottom:12px;font:500 11px/1.3 var(--sans);color:var(--mute);text-align:right;pointer-events:none;max-width:44%}
+.foot{position:absolute;left:clamp(16px,3vw,40px);bottom:clamp(12px,2.4vh,28px);display:flex;flex-direction:column;gap:12px;max-width:min(560px,calc(100% - 32px))}
+.readouts{display:grid;grid-template-columns:repeat(4,auto);gap:0 26px;border-top:1px solid var(--rule);padding-top:8px;pointer-events:none}
+.ro dt{font:600 10px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--mute);margin:0 0 5px}
+.ro dd{margin:0;font:400 clamp(20px,2.6vw,30px)/1 var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+.ro dd small{font-size:.45em;letter-spacing:0;color:var(--mute);margin-left:3px}
+details.notes{font:400 13px/1.5 var(--serif);color:var(--ink);background:var(--panel);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid var(--rule);border-radius:10px;padding:8px 12px;max-width:520px}
+details.notes summary{cursor:pointer;font:600 10px/1.6 var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--mute);list-style:none}
+details.notes summary::before{content:"+ ";color:var(--accent)}details.notes[open] summary::before{content:"– "}
+details.notes p{margin:8px 0 0}details.notes[open]{max-height:38vh;overflow:auto}
+.panel{border-left:1px solid var(--rule);padding:22px 20px 28px;overflow:auto;height:100svh;position:sticky;top:0;background:color-mix(in srgb,var(--bg) 70%,#fff 30%)}
+body.dark .panel{background:color-mix(in srgb,var(--bg) 85%,#fff 6%)}
+.plate{font:600 10px/1 var(--sans);letter-spacing:.2em;text-transform:uppercase;color:var(--mute);display:flex;justify-content:space-between;padding-bottom:10px;border-bottom:1px solid var(--rule)}
+.panel h2{font:italic 400 28px/1.05 var(--serif);margin:14px 0 2px}
+.latin{font:italic 400 14px/1.3 var(--serif);color:var(--mute);margin:0 0 12px}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;margin:0 0 16px;font:400 12px/1.4 var(--sans)}
+.facts dt{color:var(--mute)}.facts dd{margin:0;text-align:right}
+.sec{font:600 10px/1 var(--sans);letter-spacing:.2em;text-transform:uppercase;color:var(--mute);margin:18px 0 8px}
+.ways{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.way{appearance:none;border:1px solid var(--rule);background:transparent;color:var(--ink);border-radius:10px;padding:8px 0 6px;cursor:pointer;font:500 11px/1.2 var(--sans);display:flex;flex-direction:column;align-items:center;gap:6px}
+.way i{width:26px;height:26px;border-radius:50%;display:block;box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)}
+.way[aria-pressed=true]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.acts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+button.act{appearance:none;border:1px solid var(--ink);background:transparent;color:var(--ink);border-radius:999px;padding:11px 10px;font:600 12.5px/1 var(--sans);cursor:pointer;transition:background .15s,color .15s;min-height:44px}
+button.act:hover{background:var(--ink);color:var(--bg)}
+button.act[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
+button.act.ghost{border-color:var(--rule)}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0;font:500 12.5px/1.2 var(--sans)}
+.row output{font:12px var(--mono);color:var(--mute);min-width:3ch;text-align:right}
+input[type=range]{flex:1;accent-color:var(--accent);height:28px}
+.tg{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.tg label{display:flex;align-items:center;gap:7px;border:1px solid var(--rule);border-radius:999px;padding:8px 12px;font:500 12px/1 var(--sans);cursor:pointer;min-height:36px}
+.tg input{accent-color:var(--accent)}
+select{font:500 12px var(--sans);background:transparent;color:var(--ink);border:1px solid var(--rule);border-radius:8px;padding:6px}
+.vrnote{font:11px/1.4 var(--sans);color:var(--mute);margin:6px 0 0}
+.nogpu{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:30px;font:italic 20px/1.4 var(--serif);z-index:3}
+@media (max-width:820px){
+ .page{grid-template-columns:1fr;grid-template-rows:auto auto}
+ .stage{height:68svh;min-height:420px}
+ .panel{height:auto;position:static;border-left:0;border-top:1px solid var(--rule);padding-bottom:40px}
+ h1{font-size:clamp(34px,11vw,56px)}
+ .dek{display:none}
+ .hint{display:none}
+ .readouts{grid-template-columns:repeat(4,auto);gap:0 14px}
+ .ro dd{font-size:19px}
+ .foot{gap:8px}
+}
+
+/* dark glass windows */
+.panel,details.notes,.readouts{--ink:#e9eef0;--mute:#9fb0ba;--rule:rgba(233,238,240,.16);--panel:rgba(255,255,255,.06);color:var(--ink);background:linear-gradient(160deg,rgba(26,34,44,.62),rgba(10,15,22,.52));-webkit-backdrop-filter:blur(18px) saturate(1.3);backdrop-filter:blur(18px) saturate(1.3);border:1px solid rgba(255,255,255,.16);box-shadow:0 10px 36px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.14)}
+.page{display:block}
+.panel{position:fixed;right:12px;top:12px;bottom:12px;width:316px;height:auto;border-radius:20px;z-index:5}
+.readouts{border-radius:14px;padding:8px 14px;pointer-events:none}
+details.notes{border-radius:14px}
+body.dark .panel{background:linear-gradient(160deg,rgba(26,34,44,.62),rgba(10,15,22,.52))}
+.panel button,.panel select,.panel input{color-scheme:dark}
+@media (max-width:820px){#bCam{left:auto;right:12px;transform:none;padding:9px 14px;font-size:13px}body.camhash #bCam{left:50%;right:auto;transform:translate(-50%,-50%)}.panel{left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:46svh;border-radius:18px}.stage{height:100svh}}
+
+/* phone camera mode */
+#bCam{position:fixed;left:50%;transform:translateX(-50%);top:14px;z-index:6;font:600 15px var(--sans);padding:11px 20px;border-radius:999px;border:1px solid rgba(255,255,255,.28);color:#fff;background:linear-gradient(160deg,rgba(40,120,180,.78),rgba(20,60,100,.7));-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:0 8px 28px rgba(0,0,0,.3)}
+body.camhash #bCam{top:50%;transform:translate(-50%,-50%);font-size:19px;padding:18px 30px}
+body.ph #bCam,body.ph .panel,body.ph .mast,body.ph .foot,body.ph .hint{display:none!important}
+body.ph{background:#000!important;overflow:hidden}
+#phVid{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;display:none;background:#000}
+body.ph #phVid{display:block}
+body.ph .stage,body.ph canvas{background:transparent!important}
+body.ph .page,body.ph .stage{position:fixed;inset:0;z-index:1;height:100%!important;min-height:0}
+#ph{display:none;position:fixed;inset:0;z-index:7;pointer-events:none;font-family:var(--sans);color:#eef3f5}
+body.ph #ph{display:block}
+#phHint{position:absolute;left:50%;top:calc(18px + env(safe-area-inset-top));transform:translateX(-50%);max-width:86%;text-align:center;padding:9px 16px;border-radius:14px;font-size:14px;line-height:1.35;background:rgba(10,15,22,.55);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.16)}
+#phRet{position:absolute;left:50%;top:50%;width:64px;height:64px;margin:-32px 0 0 -32px;border:2px solid rgba(255,255,255,.85);border-radius:50%;display:none;box-shadow:0 0 0 1px rgba(0,0,0,.25)}
+#phRet::after{content:"";position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:#fff}
+#phSheet{position:absolute;left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));pointer-events:auto;border-radius:20px;padding:6px 12px 12px;background:linear-gradient(160deg,rgba(28,36,46,.66),rgba(10,15,22,.58));-webkit-backdrop-filter:blur(20px) saturate(1.3);backdrop-filter:blur(20px) saturate(1.3);border:1px solid rgba(255,255,255,.16);box-shadow:0 10px 36px rgba(0,0,0,.35);transition:transform .28s ease;max-height:52svh;overflow:hidden}
+#phSheet.closed{transform:translateY(calc(100% - 38px - env(safe-area-inset-bottom)))}
+#phHandle{display:flex;align-items:center;justify-content:center;height:30px;cursor:pointer;font:600 11px var(--sans);letter-spacing:.2em;text-transform:uppercase;color:#a9bac4}
+#phHandle::before{content:"";width:38px;height:4px;border-radius:2px;background:rgba(255,255,255,.4);margin-right:10px}
+#phBody{overflow:auto;max-height:calc(52svh - 48px);-webkit-overflow-scrolling:touch}
+#phGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+#phGrid button{font:600 13px var(--sans);padding:11px 6px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.07);color:#eef3f5}
+#phGrid button[aria-pressed=true]{background:rgba(60,150,210,.55);border-color:rgba(140,200,240,.7)}
+#phSl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin-top:10px;font-size:12px;align-items:center;color:#c4d0d7}
+#phSl input{width:100%}
+#phSt{margin-top:8px;font-size:11px;color:#8fa1ab}
+</style>
+</head>
+<body>
+<div class="page">
+ <main class="stage" id="stage">
+  <canvas id="c"></canvas>
+  <div class="nogpu" id="nogpu"><div>WebGPU isn’t available in this browser.<br><span style="font-size:15px;color:var(--mute)">Try a recent Chrome, Edge or Safari Technology Preview — or the Quest Browser with WebGPU enabled.</span></div></div>
+  <header class="mast">
+   <p class="kicker">Material Studies <b>№ 14</b></p>
+   <h1>Whale Shark Jelly.</h1>
+   <p class="dek">A soft-body study in two layers of cast gel — one clear, one milk. Pull it, tuck it, feed it.</p>
+  </header>
+  <div class="hint">Drag the jelly to pull · drag the table to orbit<br>scroll or pinch to zoom · Shift or Twist to wring</div>
+  <div class="foot">
+   <details class="notes"><summary>Notes</summary>
+    <p>The body is a signed-distance whale shark: an elliptical section swept along the spine, three low ridges down each flank, fins cut from one recipe — a triangle with a convex leading edge, a falcate trailing edge and a tip that thins away.</p>
+    <p>A hex lattice is snapped to that surface and split into five tetrahedra a cell. Each tet is solved with XPBD: co-rotational shape matching plus a volume constraint, with firm fins, edge damping and a frictional table.</p>
+    <p>The mouth is one lattice layer left out of the mesh, so the lips are only joined behind. A gulp shortens the upper fibres of the jaw until it tips; gills flare the same way. Light is refracted through the gel and absorbed with Beer–Lambert; every marking is painted in rest space, so it stays on the jelly as it wobbles.</p>
+   </details>
+   <dl class="readouts">
+    <div class="ro"><dt>Mass</dt><dd><span id="roMass">–</span><small>g</small></dd></div>
+    <div class="ro"><dt>Volume</dt><dd><span id="roVol">100</span><small>%</small></dd></div>
+    <div class="ro"><dt>Gape</dt><dd><span id="roGape">–</span><small>mm</small></dd></div>
+    <div class="ro"><dt>Krill eaten</dt><dd><span id="roKrill">0</span></dd></div>
+   </dl>
+  </div>
+ </main>
+ <aside class="panel">
+  <div class="plate"><span>Specimen</span><span>Plate 14</span></div>
+  <h2>Whale shark</h2>
+  <p class="latin">Rhincodon typus, cast in two layers</p>
+  <dl class="facts">
+   <dt>Outer layer</dt><dd>clear gel, absorbing</dd>
+   <dt>Inner layer</dt><dd>milk gel, belly &amp; lower jaw</dd>
+   <dt>Length</dt><dd>300 mm</dd>
+   <dt>Scale</dt><dd>1 unit = 100 mm</dd>
+  </dl>
+  <div class="sec">Colourway</div>
+  <div class="ways" id="ways"></div>
+  <div class="sec">Behaviour</div>
+  <div class="acts">
+   <button class="act" id="bGulp">Gulp</button>
+   <button class="act" id="bSwish" aria-pressed="false">Swish tail</button>
+   <button class="act" id="bEyes" aria-pressed="false" style="display:none">Tuck the eyes</button>
+   <button class="act" id="bLight" aria-pressed="false">Light up</button>
+   <button class="act" id="bOcean" aria-pressed="false">Ocean gravity</button>
+   <button class="act" id="bSwim" aria-pressed="false">Swim</button>
+   <button class="act" id="bLure" aria-pressed="false">Follow my food</button>
+   <button class="act" id="bJf" aria-pressed="true">Jellyfish</button>
+   <button class="act" id="bUw" aria-pressed="false">Underwater blue</button>
+   <button class="act" id="bCau" aria-pressed="true">Light rays</button>
+   <button class="act" id="bKrill">Scatter krill</button>
+   <button class="act ghost" id="bReset">Reset</button>
+  </div>
+  <div class="sec">Material</div>
+  <div class="row"><label for="sFirm">Firmness</label><input id="sFirm" type="range" min="0" max="100" value="55"><output id="oFirm">55</output></div>
+  <div class="row"><label for="sSnd">Ocean sound</label><input id="sSnd" type="range" min="0" max="100" value="50"><output id="oSnd">50</output></div>
+  <div class="row"><label for="sDamp">Damping</label><input id="sDamp" type="range" min="0" max="100" value="35"><output id="oDamp">35</output></div>
+  <div class="tg">
+   <label><input type="checkbox" id="cSlow"> ¼ speed</label>
+   <label><input type="checkbox" id="cMesh"> Show mesh</label>
+   <label><input type="checkbox" id="cPause"> Pause</label>
+   <label><input type="checkbox" id="cTwist"> Twist pointer</label>
+   <label><input type="checkbox" id="cKelp" checked> Seaweed</label>
+  </div>
+  <div class="row" style="margin-top:14px"><label for="sDetail">Lattice detail</label>
+   <select id="sDetail"><option value="0.04">Fine · 18k tets</option><option value="0.05" selected>Standard · 9k</option><option value="0.06">Light · 5k</option></select></div>
+  <div class="sec">Headset</div>
+  <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
+  <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
+  <p class="vrnote" id="vrNote">Checking WebXR…</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build __VER__</p>
+  <p class="vrnote" style="opacity:.6;font-size:11px;margin-top:2px">Body shape based on "Model 99A - Whale Shark" by DigitalLife3D (CC BY-NC 4.0)</p>
+ </aside>
+</div>
+
+<video id="phVid" playsinline muted autoplay></video>
+<button id="bCam" hidden style="display:none!important">Camera AR</button>
+<div id="ph">
+ <div id="phHint"></div><div id="phRet"></div>
+ <div id="phSheet"><div id="phHandle">Menu</div><div id="phBody">
+  <div id="phGrid">
+   <button id="pGulp">Gulp</button><button id="pSwish" aria-pressed="false">Swish tail</button><button id="pOcean" aria-pressed="false">Ocean gravity</button>
+   <button id="pSwim" aria-pressed="false">Swim</button><button id="pLure" aria-pressed="false">Follow my food</button><button id="pKrill">Scatter krill</button>
+   <button id="pKelp" aria-pressed="true">Seaweed</button><button id="pLight" aria-pressed="false">Light up</button><button id="pHands" aria-pressed="true">Hands</button>
+   <button id="pMove">Move shark</button><button id="pReset">Reset</button><button id="pExit">Exit</button>
+  </div>
+  <div id="phSl"><span>Size</span><input type="range" id="pSize" min="0" max="100" value="45"><span>Phone height</span><input type="range" id="pFloor" min="0" max="100" value="38"><span>Firmness</span><input type="range" id="pFirm" min="0" max="100" value="55"></div>
+  <div id="phSt"></div>
+ </div></div>
+</div>

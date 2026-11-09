@@ -1,0 +1,35 @@
+# Historial de versiones (git, más reciente primero)
+
+- **2026-11-09 11:57** — v31: caustics baked once per frame into a 256px tileable texture (was per-pixel loops), stronger underwater-blue backdrop, near-neutral jellyfish buoyancy
+- **2026-11-09 11:43** — v30: animated underwater caustics (light rays) projected along the sun onto floor, shark, kelp, jellyfish and the real floor in AR; toggle
+- **2026-11-08 22:38** — v29: smaller blue-violet jellyfish that roam the whole dish via spaced waypoints, tentacles/oral arms pushed by hands; optional underwater-blue backdrop toggle
+- **2026-11-08 22:19** — v28: pink lobed jellyfish like reference (smaller, frilly oral arms, fine tentacles), jellies grabbable and follow firmness/damping; shark self-rights (fixed ventral marker after YOFF) and pitches nose with climb/dive
+- **2026-11-08 21:52** — v27: 3 gel jellyfish (floor-limp until Swim, pulse swimming, never merge, collide with shark/hands, toggle button); food lure drops only occasionally
+- **2026-11-08 21:15** — v26: eyes anchored to the skin surface (half embedded), tuck-eyes button removed
+- **2026-11-08 21:09** — v25: eyes set deeper into the head
+- **2026-11-08 21:04** — v24: symmetric body and eyes, headset head collider
+- **2026-11-08 20:58** — v23: fix dorsal fin tip cut off by render mesh bounds
+- **2026-11-08 20:53** — v22: Follow-my-food lure uses the detailed krill model
+- **2026-11-08 20:45** — v21: detailed translucent krill, synthesised ocean ambience with volume slider
+- **2026-11-08 20:35** — v20: mouth cavity matches lattice cavity, seaweed rebuilt as tapered blades with gradient and midrib
+- **2026-11-08 20:29** — v19: body volume baked from reference whale shark model (CC BY-NC, credited)
+- **2026-11-08 20:18** — v18: thin wide slit mouth like reference, taller blunt head, snout spot artifact removed
+- **2026-11-08 20:10** — v17: whale shark proportions reworked from reference (wide flat head, swept pectorals, low dorsal), organic spot pattern
+- **2026-11-08 20:00** — v16: whale shark redesign with fine embedded skin mesh, thin fins, cleaner mouth, organic spots
+- **2026-11-08 19:36** — Build v15: phone camera mode hidden (PC web and headset only)
+- **2026-11-07 18:43** — Build v14: phone camera AR mode (tap to place, retractable menu, MediaPipe hand tracking)
+- **2026-11-07 17:56** — Build v13: dark glass windows, Follow my food lure mode
+- **2026-11-07 17:51** — Build v12: steadier float depth, krill levels and reacts to hands, pinch to relocate kelp
+- **2026-11-07 17:46** — Build v11: smoother fins/body, zebra ribbon kelp, remove status squares
+- **2026-11-07 17:38** — Seaweed: soft gel kelp strands rooted on the floor around the shark, hand/body collisions, toggle
+- **2026-11-07 17:33** — Stiffer max firmness, buoyant float + righting torque, labelled GL diagnostics, softer mouth lining/lips
+- **2026-11-07 17:20** — Ocean gravity + Swim modes, krill hunting, info board in XR, bulkier whale-shark body and rounded snout
+- **2026-11-07 17:07** — Two-hand grabs and full-hand colliders (joints, bones, palm) in XR
+- **2026-11-07 16:55** — XR: per-eye panel uniform buffers (fixes doubled/desynced menu), clear stale diagnostics at session start
+- **2026-11-07 16:49** — XR bridge: render each eye into its own texture and copy into the canvas (fixes depth/colour attachment size mismatch)
+- **2026-11-07 16:44** — Show build version in the page and in XR diagnostics
+- **2026-11-07 16:43** — XR bridge: move status squares to the visible centre area, add build tag
+- **2026-11-07 16:39** — XR bridge: in-headset status squares (green ok / red error) and GL error capture
+- **2026-11-07 16:36** — XR: render via WebGPU offscreen canvas into a WebGL XR layer (Quest Browser has no XRGPUBinding); #gpu opts into native binding
+- **2026-11-07 16:19** — Add Whale Shark Jelly (WebGPU soft-body, WebXR VR/AR)
+- **2026-11-07 16:17** — Initial commit

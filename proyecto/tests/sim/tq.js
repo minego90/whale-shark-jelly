@@ -1,0 +1,1 @@
+const fs=require('fs');const M=new Function(fs.readFileSync(__dirname+'/../../src/core_node.js','utf8')+';return {createWorld};')();const w=M.createWorld(0.06);const r=w.L.rest;let mn=9,mx=-9,a=0,b=0;for(let v=0;v<w.nv;v++){const x=r[3*v],y=r[3*v+1];if(x>0.4&&x<1.7){mn=Math.min(mn,y);mx=Math.max(mx,y);if(y>0.2)a++;else if(y<0.05)b++;}}console.log(mn,mx,a,b)
