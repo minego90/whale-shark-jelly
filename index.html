@@ -150,6 +150,7 @@ body.ph #ph{display:block}
    <button class="act" id="bSwim" aria-pressed="false">Swim</button>
    <button class="act" id="bLure" aria-pressed="false">Follow my food</button>
    <button class="act" id="bJf" aria-pressed="true">Jellyfish</button>
+   <button class="act" id="bUw" aria-pressed="false">Underwater blue</button>
    <button class="act" id="bKrill">Scatter krill</button>
    <button class="act ghost" id="bReset">Reset</button>
   </div>
@@ -170,7 +171,7 @@ body.ph #ph{display:block}
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v28 - 11-09_03:15Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v29 - 11-09_03:32Z</p>
   <p class="vrnote" style="opacity:.6;font-size:11px;margin-top:2px">Body shape based on "Model 99A - Whale Shark" by DigitalLife3D (CC BY-NC 4.0)</p>
  </aside>
 </div>
@@ -1304,10 +1305,10 @@ const JF_INST = JF_N * (JF_TENT * (JF_TSEG - 1) + JF_ORAL * (JF_OSEG - 1) * JF_F
 const JF_CENTER = [1.5, 0], JF_RAD = 1.85;
 function jfShape(c, out) { // local rest shape (y up = apex), c = 0 relaxed .. 1 contracted; layer 0 outer, 1 inner
   // small pumpkin-like bell: 8 soft lobes, flattened crown, rim tucked just under the equator
-  const TH = 1.74, Rr = 0.19 * (1 - 0.26 * c), Hh = 0.165 * (1 + 0.30 * c);
+  const TH = 1.74, Rr = 0.135 * (1 - 0.26 * c), Hh = 0.118 * (1 + 0.30 * c);
   let n = 0;
   for (let layer = 0; layer < 2; layer++) for (let r = 0; r <= JF_NR; r++) {
-    const t = r / JF_NR, th = t * TH, th_ = 0.05 * (1 - 0.6 * t) * (1 + 0.15 * c);
+    const t = r / JF_NR, th = t * TH, th_ = 0.036 * (1 - 0.6 * t) * (1 + 0.15 * c);
     const R = layer ? Rr - th_ * 0.9 : Rr, H = layer ? Hh - th_ : Hh;
     const ns = r === 0 ? 1 : JF_NS;
     for (let s = 0; s < ns; s++) {
@@ -1407,7 +1408,7 @@ function createJellies(world) {
     for (let i = 0; i < sk.length; i++) { const v = sk[i] * 3, x = pos[v], y = pos[v + 1], z = pos[v + 2]; skx[3 * i] = x; skx[3 * i + 1] = y; skx[3 * i + 2] = z; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; if (z < z0) z0 = z; if (z > z1) z1 = z; }
     sbb = [x0 - 0.1, y0 - 0.1, z0 - 0.1, x1 + 0.1, y1 + 0.1, z1 + 0.1];
   }
-  const PR = 0.022;
+  const PR = 0.017;
   function collide(b, dt, hc) {
     const p = b.p, bb = sbb, ds = SKR + PR, ds2 = ds * ds;
     for (let i = 0; i < NV; i++) {
@@ -1434,7 +1435,7 @@ function createJellies(world) {
     // integrate
     for (let i = 0; i < NV * 3; i += 3) {
       q[i] = p[i]; q[i + 1] = p[i + 1]; q[i + 2] = p[i + 2];
-      v[i + 1] -= grav * dt; const dm = Math.exp(-(0.2 + 2.6 * J.damp + 1.1 * act) * dt); v[i] *= dm; v[i + 1] *= dm; v[i + 2] *= dm;
+      v[i + 1] -= grav * dt; const dm = Math.exp(-(0.2 + 2.6 * J.damp * (1 - 0.75 * act) + 0.45 * act) * dt); v[i] *= dm; v[i + 1] *= dm; v[i + 2] *= dm;
       p[i] += v[i] * dt; p[i + 1] += v[i + 1] * dt; p[i + 2] += v[i + 2] * dt;
     }
     // edges (rest lengths follow the pulse)
@@ -1475,7 +1476,7 @@ function createJellies(world) {
     if (s < 1e-12) return; const lam = (Vt - V) / s * 0.8;
     for (let i = 0; i < NV * 3; i++) p[i] += gradv[i] * lam;
   }
-  function chain(P, Q, base, n, len, anchor, dt, G, drag, floorY) {
+  function chain(P, Q, base, n, len, anchor, dt, G, drag, floorY, hc) {
     P[base] = anchor[0]; P[base + 1] = anchor[1]; P[base + 2] = anchor[2];
     for (let s = 1; s < n; s++) {
       const o = base + s * 3, x = P[o], y = P[o + 1], z = P[o + 2];
@@ -1488,6 +1489,7 @@ function createJellies(world) {
         if (s === 1) { P[o] -= dx * k; P[o + 1] -= dy * k; P[o + 2] -= dz * k; } else { P[a] += dx * k * 0.5; P[a + 1] += dy * k * 0.5; P[a + 2] += dz * k * 0.5; P[o] -= dx * k * 0.5; P[o + 1] -= dy * k * 0.5; P[o + 2] -= dz * k * 0.5; }
       }
       for (let s = 1; s < n; s++) { const o = base + s * 3 + 1; if (P[o] < floorY) { P[o] = floorY; } }
+      if (hc && hc.n) for (let s = 1; s < n; s++) { const o = base + s * 3; for (let h = 0; h < hc.n; h++) { const q = h * 8, r = hc.a[q + 3] + 0.008, dx = P[o] - hc.a[q], dy = P[o + 1] - hc.a[q + 1], dz = P[o + 2] - hc.a[q + 2]; if (dx > r || dx < -r || dy > r || dy < -r || dz > r || dz < -r) continue; const d2 = dx * dx + dy * dy + dz * dz; if (d2 >= r * r) continue; const d = Math.sqrt(d2) || 1e-6, k = (r - d) / d; P[o] += dx * k; P[o + 1] += dy * k; P[o + 2] += dz * k; } }
     }
   }
   const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -1520,19 +1522,22 @@ function createJellies(world) {
       if (act > 0.35) {
         b.ph += dt / b.per; const x = b.ph % 1, cc = x < 0.28 ? sm(0, 1, x / 0.28) : 1 - sm(0, 1, (x - 0.28) / 0.72);
         const dc = Math.max(0, cc - b.pc); b.pc = cc; b.c = cc;
-        b.wt += dt; if (b.wt > 3) { b.wt = 0; b.yT = 0.6 + Math.random() * 1.2; b.spin = (Math.random() - 0.5) * 1.1; }
-        b.psi += b.spin * dt * 0.5 + Math.sin(tm * 0.31 + j * 2) * 0.18 * dt;
-        let hx = Math.cos(b.psi), hz = Math.sin(b.psi);
-        const ox = c0[0] - JF_CENTER[0], oz = c0[2] - JF_CENTER[1], orr = Math.hypot(ox, oz);
-        if (orr > JF_RAD * 0.62) { const w = Math.min(1, (orr - JF_RAD * 0.62) / (JF_RAD * 0.38)) * 2.2; hx -= ox / orr * w; hz -= oz / orr * w; }
-        for (let k = 0; k < NJ; k++) if (k !== j) { const dx = c0[0] - cen[k][0], dy = c0[1] - cen[k][1], dz = c0[2] - cen[k][2], d = Math.hypot(dx, dy, dz); if (d < 1.2) { const w = (1.2 - d) / 1.2 * 2.6; hx += dx / (d || 1) * w; hz += dz / (d || 1) * w; } }
-        const hl = Math.hypot(hx, hz) || 1; hx /= hl; hz /= hl; b.psi += Math.atan2(hz * Math.cos(b.psi) - hx * Math.sin(b.psi), hx * Math.cos(b.psi) + hz * Math.sin(b.psi)) * Math.min(1, dt * 1.6);
-        b.fw = norm([Math.cos(b.psi), 0, Math.sin(b.psi)]);
-        const dy = b.yT - c0[1], pitch = Math.max(-0.25, Math.min(0.25, dy * 0.35));
-        const ud = norm([b.fw[0] * (0.36 + pitch), 1, b.fw[2] * (0.36 + pitch)]);
-        b.ub = norm([b.ub[0] + (ud[0] - b.ub[0]) * Math.min(1, dt * 2.2), b.ub[1] + (ud[1] - b.ub[1]) * Math.min(1, dt * 2.2), b.ub[2] + (ud[2] - b.ub[2]) * Math.min(1, dt * 2.2)]);
-        const th = (0.62 + Math.max(-0.2, Math.min(0.35, dy * 0.3))) * act * dc * 2.4;
-        for (let i = 0; i < NV; i++) { b.v[3 * i] += b.ub[0] * th; b.v[3 * i + 1] += b.ub[1] * th; b.v[3 * i + 2] += b.ub[2] * th; }
+        // wander between random waypoints spread over the whole dish, each chosen away from the other jellies
+        b.wt += dt;
+        const pickW = () => { let best = null, bs = -1; for (let t = 0; t < 12; t++) { const a = Math.random() * 6.283, r = Math.sqrt(Math.random()) * JF_RAD * 0.85, w = [JF_CENTER[0] + Math.cos(a) * r, 0.45 + Math.random() * 1.45, JF_CENTER[1] + Math.sin(a) * r]; let sc = Math.hypot(w[0] - c0[0], w[2] - c0[2]) * 0.4; for (let k = 0; k < NJ; k++) if (k !== j) { sc += Math.min(Math.hypot(w[0] - cen[k][0], w[1] - cen[k][1], w[2] - cen[k][2]), B[k].wp ? Math.hypot(w[0] - B[k].wp[0], w[1] - B[k].wp[1], w[2] - B[k].wp[2]) : 9); } if (sc > bs) { bs = sc; best = w; } } return best; };
+        if (!b.wp || b.wt > 9 || Math.hypot(b.wp[0] - c0[0], b.wp[1] - c0[1], b.wp[2] - c0[2]) < 0.3) { b.wp = pickW(); b.wt = 0; }
+        let hx = b.wp[0] - c0[0], hy = b.wp[1] - c0[1], hz = b.wp[2] - c0[2];
+        { const l = Math.hypot(hx, hy, hz) || 1; hx /= l; hy /= l; hz /= l; }
+        hx += Math.sin(tm * 0.37 + j * 2) * 0.25; hz += Math.cos(tm * 0.29 + j) * 0.25;
+        for (let k = 0; k < NJ; k++) if (k !== j) { const dx = c0[0] - cen[k][0], dy = c0[1] - cen[k][1], dz = c0[2] - cen[k][2], d = Math.hypot(dx, dy, dz) || 1; if (d < 1.0) { const w = (1.0 - d) / 1.0 * 3.0; hx += dx / d * w; hy += dy / d * w; hz += dz / d * w; } }
+        { const ox = c0[0] - JF_CENTER[0], oz = c0[2] - JF_CENTER[1], orr = Math.hypot(ox, oz); if (orr > JF_RAD * 0.85) { const w = (orr - JF_RAD * 0.85) * 6; hx -= ox / orr * w; hz -= oz / orr * w; } }
+        if (c0[1] < 0.35) hy += 1.5; if (c0[1] > 2.0) hy -= 1.5;
+        const dl = Math.hypot(hx, hy, hz) || 1; hx /= dl; hy /= dl; hz /= dl;
+        b.fw = norm([hx, 0, hz]); b.psi = Math.atan2(hz, hx);
+        const ud = norm([hx * 0.85, Math.max(0.35, hy + 0.55), hz * 0.85]); // apex leads the way, tilted toward travel
+        const kk = Math.min(1, dt * 1.8); b.ub = norm([b.ub[0] + (ud[0] - b.ub[0]) * kk, b.ub[1] + (ud[1] - b.ub[1]) * kk, b.ub[2] + (ud[2] - b.ub[2]) * kk]);
+        const th = 0.6 * act * dc * 2.4, fy = c0[1] > 2.05 ? 0 : Math.max(0, Math.min(1.2, 0.55 + (b.wp[1] - c0[1]) * 1.6));
+        for (let i = 0; i < NV; i++) { b.v[3 * i] += b.ub[0] * th + hx * th * 0.35; b.v[3 * i + 1] += b.ub[1] * th * 0.8 * fy; b.v[3 * i + 2] += b.ub[2] * th + hz * th * 0.35; }
       } else { // limp: track the real posture so the goal never fights it
         const a = b.p, ux = a[0] - c0[0], uy = a[1] - c0[1], uz = a[2] - c0[2]; b.ub = norm([b.ub[0] + (ux - b.ub[0]) * 0.3, b.ub[1] + (uy - b.ub[1]) * 0.3, b.ub[2] + (uz - b.ub[2]) * 0.3]); b.c *= 0.96; b.pc = b.c;
       }
@@ -1544,15 +1549,15 @@ function createJellies(world) {
         let ax = 0, ay = 0, az = 0, bx = 0, by = 0, bz = 0; const pa = B[a].p, pb = B[c].p;
         for (let i = 0; i < NV; i++) { ax += pa[3 * i]; ay += pa[3 * i + 1]; az += pa[3 * i + 2]; bx += pb[3 * i]; by += pb[3 * i + 1]; bz += pb[3 * i + 2]; }
         ax /= NV; ay /= NV; az /= NV; bx /= NV; by /= NV; bz /= NV;
-        const dx = bx - ax, dy = by - ay, dz = bz - az, d = Math.hypot(dx, dy, dz) || 1e-6, D0 = 0.62;
+        const dx = bx - ax, dy = by - ay, dz = bz - az, d = Math.hypot(dx, dy, dz) || 1e-6, D0 = 0.5;
         if (d < D0) { const k = (D0 - d) / d * 0.5; for (let i = 0; i < NV; i++) { pa[3 * i] -= dx * k; pa[3 * i + 1] -= dy * k; pa[3 * i + 2] -= dz * k; pb[3 * i] += dx * k; pb[3 * i + 1] += dy * k; pb[3 * i + 2] += dz * k; } }
       }
     }
     // tentacles
     for (let j = 0; j < NJ; j++) {
       const b = B[j], u = b.ub, gw = 0.6 + 2.6 * (1 - act), gb = 3.2 * act, G = [-u[0] * gb, -gw - u[1] * gb, -u[2] * gb], G2 = [G[0] * 1.3, G[1] * 1.3, G[2] * 1.3];
-      for (let k = 0; k < JF_TENT; k++) { const a = rimIdx(k) * 3; chain(b.tp, b.tq, k * JF_TSEG * 3, JF_TSEG, 0.046 + 0.012 * ((k * 7) % 5) / 4, [b.p[a], b.p[a + 1], b.p[a + 2]], dt, G, 0.95, 0.01); }
-      for (let k = 0; k < JF_ORAL; k++) { const a = oralIdx(k) * 3; chain(b.op, b.oq, k * JF_OSEG * 3, JF_OSEG, 0.046, [b.p[a], b.p[a + 1], b.p[a + 2]], dt, G2, 0.94, 0.012); }
+      for (let k = 0; k < JF_TENT; k++) { const a = rimIdx(k) * 3; chain(b.tp, b.tq, k * JF_TSEG * 3, JF_TSEG, 0.034 + 0.009 * ((k * 7) % 5) / 4, [b.p[a], b.p[a + 1], b.p[a + 2]], dt, G, 0.95, 0.01, hc); }
+      for (let k = 0; k < JF_ORAL; k++) { const a = oralIdx(k) * 3; chain(b.op, b.oq, k * JF_OSEG * 3, JF_OSEG, 0.034, [b.p[a], b.p[a + 1], b.p[a + 2]], dt, G2, 0.94, 0.012, hc); }
     }
     skin();
   };
@@ -1567,12 +1572,12 @@ function createJellies(world) {
       // long fine tentacles from the rim
       for (let k = 0; k < JF_TENT; k++) for (let s = 0; s < JF_TSEG - 1; s++) {
         const o = (k * JF_TSEG + s) * 3, o2 = o + 3, P = b.tp, dx = P[o2] - P[o], dy = P[o2 + 1] - P[o + 1], dz = P[o2 + 2] - P[o + 2], l = Math.hypot(dx, dy, dz) || 1e-6, t = s / (JF_TSEG - 2);
-        put((P[o] + P[o2]) / 2, (P[o + 1] + P[o2 + 1]) / 2, (P[o + 2] + P[o2 + 2]) / 2, qx2d(dx / l, dy / l, dz / l), l * 0.62, 0.0042 * (1 - 0.5 * t), 0.0042 * (1 - 0.5 * t), 0.05 + 0.4 * t);
+        put((P[o] + P[o2]) / 2, (P[o + 1] + P[o2 + 1]) / 2, (P[o + 2] + P[o2 + 2]) / 2, qx2d(dx / l, dy / l, dz / l), l * 0.62, 0.0034 * (1 - 0.5 * t), 0.0034 * (1 - 0.5 * t), 0.05 + 0.4 * t);
       }
       // frilly oral arms: twisted, ruffled ribbons hanging from the centre
       for (let k = 0; k < JF_ORAL; k++) for (let s = 0; s < JF_OSEG - 1; s++) {
         const o = (k * JF_OSEG + s) * 3, o2 = o + 3, P = b.op, dx = P[o2] - P[o], dy = P[o2 + 1] - P[o + 1], dz = P[o2 + 2] - P[o + 2], l = Math.hypot(dx, dy, dz) || 1e-6, t = s / (JF_OSEG - 2);
-        const qd = qx2d(dx / l, dy / l, dz / l), wdt = 0.042 * (1 - 0.55 * t) + 0.006;
+        const qd = qx2d(dx / l, dy / l, dz / l), wdt = 0.03 * (1 - 0.55 * t) + 0.005;
         for (let f = 0; f < JF_FR; f++) {
           const u = (f + 0.5) / JF_FR, ang = k * 1.57 + (s + u) * 1.9 + Math.sin(tm * 1.3 + s + k) * 0.35, ha = ang / 2, qr = qmul(qd, [Math.sin(ha), 0, 0, Math.cos(ha)]);
           const wob = Math.sin((s + u) * 3.1 + k * 2 + tm * 0.9) * 0.012;
@@ -1580,7 +1585,7 @@ function createJellies(world) {
         }
       }
       // glowing manubrium under the bell
-      { const c2 = JF_HALF * 3, u = b.ub; put(b.p[c2] - u[0] * 0.03, b.p[c2 + 1] - u[1] * 0.03, b.p[c2 + 2] - u[2] * 0.03, [0, 0, 0, 1], 0.04, 0.03, 0.04, 0.52); }
+      { const c2 = JF_HALF * 3, u = b.ub; put(b.p[c2] - u[0] * 0.02, b.p[c2 + 1] - u[1] * 0.02, b.p[c2 + 2] - u[2] * 0.02, [0, 0, 0, 1], 0.028, 0.021, 0.028, 0.52); }
     }
     J.count = n; return n;
   };
@@ -1750,6 +1755,12 @@ struct FloorOut { @location(0) col: vec4<f32>, @builtin(frag_depth) depth: f32 }
     col = mix(g.bgLow.rgb, g.bgTop.rgb, smoothstep(0.0, 0.5, rd.y));
     if (AR) { alpha = 0.0; }
   }
+  if (!AR && g.tint.w > 0.001) { // optional underwater backdrop: a faint blue that deepens upward and with distance
+    let dist = select(1.0, clamp(length((g.cam.xyz + rd * (-g.cam.y / min(rd.y, -0.0005))).xz - vec2<f32>(1.5, 0.0)) / 6.0, 0.0, 1.0), rd.y < -0.0005);
+    let up = clamp(rd.y * 1.6 + 0.35, 0.0, 1.0);
+    let deep = mix(vec3<f32>(0.80, 0.90, 1.0), vec3<f32>(0.62, 0.80, 0.98), max(up, dist));
+    col = mix(col, col * deep, g.tint.w * 0.85);
+  }
   o.col = vec4<f32>(col, alpha);
   return o;
 }
@@ -1837,18 +1848,18 @@ fn qrot(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
   if (i.kind > 1.5 && i.kind < 2.5) { col = base * (0.55 + 0.45 * ndl) + vec3<f32>(sp * 0.4); }
   if (i.kind > 3.5) { let rim = pow(1.0 - max(dot(N, V), 0.0), 2.2); col = base * (0.42 + 0.45 * ndl * k) * ao + vec3<f32>(sp * 0.8 * k) + vec3<f32>(0.45, 0.68, 0.85) * rim * 0.45 + env(reflect(-V, N)) * fres * 0.35; if (i.kind > 4.5 && i.kind < 5.5) { col = base * (0.55 + 0.6 * ndl) + vec3<f32>(sp * 0.5) + vec3<f32>(0.25, 0.05, 0.0) * rim; } if (i.kind > 5.5) { col = mix(col, vec3<f32>(0.9, 0.95, 1.0), 0.25); } }
   if (i.kind > 2.5 && i.kind < 3.5) { let tr = pow(1.0 - max(dot(N, V), 0.0), 2.0); col = base * (0.30 + 0.75 * ndl * k) * ao + vec3<f32>(sp * 0.55 * k) + base * tr * 0.55 + g.glow.rgb * lu() * 0.45 * i.shade; }
-  if (i.kind > 6.5) { // jellyfish tentacles (shade < 0.5) and frilly oral arms (shade >= 0.5): pink-peach translucent gel
+  if (i.kind > 6.5) { // jellyfish tentacles (shade < 0.5) and frilly oral arms (shade >= 0.5): blue-violet translucent gel
     let rim7 = pow(1.0 - abs(dot(N, V)), 1.5);
     let fr = step(0.5, i.shade);
     let tt = select(i.shade * 2.0, (i.shade - 0.5) * 2.0, fr > 0.5);
-    let pinkA = vec3<f32>(1.0, 0.62, 0.55);
-    let peach = vec3<f32>(1.0, 0.80, 0.70);
-    let orng = vec3<f32>(1.0, 0.45, 0.20);
-    var b7 = mix(vec3<f32>(0.98, 0.88, 0.86), pinkA, tt * 0.7);
-    if (fr > 0.5) { b7 = mix(peach, mix(pinkA, vec3<f32>(0.95, 0.42, 0.55), tt), 0.4 + 0.6 * rim7); }
+    let pinkA = vec3<f32>(0.62, 0.45, 1.0);
+    let peach = vec3<f32>(0.62, 0.78, 1.0);
+    let orng = vec3<f32>(0.75, 0.35, 1.0);
+    var b7 = mix(vec3<f32>(0.80, 0.86, 1.0), pinkA, tt * 0.8);
+    if (fr > 0.5) { b7 = mix(peach, mix(pinkA, vec3<f32>(0.55, 0.28, 0.95), tt), 0.4 + 0.6 * rim7); }
     let ndl2 = abs(dot(N, L));
     col = b7 * (0.55 + 0.45 * ndl2 * k) + vec3<f32>(sp * 0.45 * k) + orng * rim7 * fr * 0.35 + pinkA * rim7 * 0.25 + g.glow.rgb * lu() * 0.35 * (0.3 + rim7);
-    if (i.shade > 0.515 && i.shade < 0.525) { col = vec3<f32>(1.0, 0.55, 0.25) * (0.75 + 0.35 * ndl2) + vec3<f32>(1.0, 0.75, 0.45) * rim7 * 0.4; }
+    if (i.shade > 0.515 && i.shade < 0.525) { col = vec3<f32>(0.68, 0.35, 1.0) * (0.75 + 0.35 * ndl2) + vec3<f32>(0.75, 0.70, 1.0) * rim7 * 0.4; }
   }
   return vec4<f32>(col, 1.0);
 }
@@ -2095,10 +2106,10 @@ fn markings(p0: vec3<f32>, finw: f32, nrm: vec3<f32>, pf: f32) -> Mk {
   let uG = clamp(project(wp + refract(rayD, N, 1.0 / 1.34) * sp), vec2<f32>(0.002), vec2<f32>(0.998));
   let uB = clamp(project(wp + refract(rayD, N, 1.0 / 1.37) * sp), vec2<f32>(0.002), vec2<f32>(0.998));
   let sc = vec3<f32>(textureSampleLevel(sceneTex, samp, uR, 0.0).r, textureSampleLevel(sceneTex, samp, uG, 0.0).g, textureSampleLevel(sceneTex, samp, uB, 0.0).b);
-  // pink-peach bell with an orange glow inside, 8 soft lobes, scalloped orange rim
-  let pink = vec3<f32>(1.0, 0.58, 0.55);
-  let orng = vec3<f32>(1.0, 0.46, 0.18);
-  let absorbJ = vec3<f32>(0.35, 1.9, 1.5);
+  // blue-to-violet bell with a violet glow inside, 8 soft lobes, scalloped orange rim
+  let pink = mix(vec3<f32>(0.22, 0.55, 1.0), vec3<f32>(0.62, 0.36, 1.0), smoothstep(0.35, 0.95, t)); // blue crown -> violet rim
+  let orng = vec3<f32>(0.72, 0.30, 1.0);
+  let absorbJ = mix(vec3<f32>(2.8, 1.0, 0.22), vec3<f32>(1.1, 2.0, 0.35), smoothstep(0.35, 0.95, t));
   let T = exp(-absorbJ * thick * 3.0);
   let wrap = clamp((dot(N, L) + 0.5) / 1.5, 0.0, 1.0);
   let inner = mix(pink, orng, smoothstep(0.35, 0.85, t) * 0.75);
@@ -2114,8 +2125,8 @@ fn markings(p0: vec3<f32>, finw: f32, nrm: vec3<f32>, pf: f32) -> Mk {
   let seam = (1.0 - smoothstep(0.0, 0.06, 0.5 - gd)) * 0.0 + (1.0 - smoothstep(0.0, 0.045, abs(gd - 0.5))) * smoothstep(0.1, 0.25, t) * (1.0 - smoothstep(0.9, 0.98, t));
   let scal = 0.5 + 0.5 * cos(ph * 6.2832 * 32.0);
   let rimB = smoothstep(0.86 + 0.05 * scal, 0.97, t);
-  let glowB = exp(-pow((t - 0.72) / 0.20, 2.0));
-  col = mix(col, vec3<f32>(1.0, 0.86, 0.82) * (0.55 + 0.5 * wrap), seam * 0.45);
+  let glowB = exp(-pow((t - 0.82) / 0.14, 2.0));
+  col = mix(col, vec3<f32>(0.82, 0.88, 1.0) * (0.55 + 0.5 * wrap), seam * 0.45);
   col = col + orng * glowB * (0.22 + 0.25 * layer) * (0.6 + 0.4 * wrap);
   col = mix(col, orng * (0.75 + 0.35 * wrap) + vec3<f32>(spec), rimB * 0.85);
   col = mix(col, vec3<f32>(0.80, 0.90, 1.0) * (0.55 + 0.5 * wrap), layer * (1.0 - smoothstep(0.55, 0.95, t)) * 0.22); // pale bluish sub-umbrella
@@ -2252,7 +2263,7 @@ function lureStep(dt) {
   if (d < 0.22 && lure.s > 0.8) { lure.act = false; lure.s = 0; lure.grab = false; lure.wait = 7 + Math.random() * 9; S.huntFree = false; }
 }
 function bodyCentre() { const p = world.pos, n = world.nv; let x = 0, y = 0, z = 0; for (let i = 0; i < n; i++) { x += p[3 * i]; y += p[3 * i + 1]; z += p[3 * i + 2]; } return [x / n, y / n, z / n]; }
-const ST = { jf: true, way: 0, lu: 0, luT: 0, eyeExt: 1, eyeT: 1, swishT: 0, ocean: false, swim: false, kelp: true, gulpT: -1, mesh: false, slow: false, pause: false, twist: false, firm: 0.55, damp: 0.35, nsub: 4, cell: 0.05 };
+const ST = { uw: false, uwK: 0, jf: true, way: 0, lu: 0, luT: 0, eyeExt: 1, eyeT: 1, swishT: 0, ocean: false, swim: false, kelp: true, gulpT: -1, mesh: false, slow: false, pause: false, twist: false, firm: 0.55, damp: 0.35, nsub: 4, cell: 0.05 };
 const cam = { yaw: -0.95, pitch: 0.62, dist: 4.7, tx: 1.35, ty: 0.12, tz: 0 };
 const sm = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
@@ -2404,6 +2415,7 @@ function advance(dtReal) {
   world.step(dt);
   krill.step(dt, steer);
   if (ST.kelp) kelp.step(dt);
+  ST.uwK += ((ST.uw ? 1 : 0) - ST.uwK) * Math.min(1, dtReal * 1.5);
   if (ST.jf) { jf.setSwim(ST.swim); jf.setParams(ST.firm, ST.damp); jf.step(dt); }
   simMs = simMs * 0.9 + (performance.now() - t0) * 0.1;
   adaptT += dtReal;
@@ -2419,7 +2431,7 @@ function writeG(vr, viewProj, camPos, camFwd, off) {
   d.set(viewProj, 0); d.set(M4.inv(viewProj), 16); d.set(lightVP, 32);
   const V = (i, a, b = 0) => { d[48 + i * 4] = a[0]; d[49 + i * 4] = a[1]; d[50 + i * 4] = a[2]; d[51 + i * 4] = b; };
   V(0, camPos, performance.now() / 1000); V(1, camFwd, u); V(2, LIGHT, world.S.flare); V(3, [vr.w, vr.h, 1 / vr.w, 1 / vr.h]);
-  V(4, w.absorb.map(x => x * 1.35), 1.0); V(5, w.tint, 0); V(6, w.pig, 0.97); V(7, w.pale, 0); V(8, w.milk, (xrS && xrS.ar) || PHN.on ? 1 : 0);
+  V(4, w.absorb.map(x => x * 1.35), 1.0); V(5, w.tint, ST.uwK); V(6, w.pig, 0.97); V(7, w.pale, 0); V(8, w.milk, (xrS && xrS.ar) || PHN.on ? 1 : 0);
   V(9, bg, 1.0);
   V(10, bg.map(x => Math.min(1, u > 0.5 ? x * 1.8 + 0.01 : x * 0.5 + 0.5)), 10);
   V(11, w.glow, 0); V(12, [ST.mesh ? 1 : 0, world.YM - YOFF, world.MOUTH.r[1]], 10);
@@ -2558,11 +2570,12 @@ const A = {
   krill() { if (ST.ocean) { const c = bodyCentre(); krill.spawn(110, c); } else krill.spawn(110); },
   reset() { world.reset(); krill.clear(); ST.gulpT = -1; ST.swishT = 0; ST.ocean = false; ST.swim = false; ST.lure = false; lure.grab = false; ST.eyeT = 1; ST.luT = 0; jf.reset(); uploadDynamic(); sync(); },
   jf() { ST.jf = !ST.jf; sync(); },
+  uw() { ST.uw = !ST.uw; sync(); },
   way(i) { ST.way = i; sync(); },
 };
 function sync() {
   $('bSwish').setAttribute('aria-pressed', !!ST.swishT); $('bEyes').setAttribute('aria-pressed', !ST.eyeT); $('bEyes').textContent = ST.eyeT ? 'Tuck the eyes' : 'Release the eyes';
-  $('bLight').setAttribute('aria-pressed', !!ST.luT); $('bOcean').setAttribute('aria-pressed', !!ST.ocean); $('bSwim').setAttribute('aria-pressed', !!ST.swim); $('bLure').setAttribute('aria-pressed', !!ST.lure); $('bJf').setAttribute('aria-pressed', !!ST.jf);
+  $('bLight').setAttribute('aria-pressed', !!ST.luT); $('bOcean').setAttribute('aria-pressed', !!ST.ocean); $('bSwim').setAttribute('aria-pressed', !!ST.swim); $('bLure').setAttribute('aria-pressed', !!ST.lure); $('bJf').setAttribute('aria-pressed', !!ST.jf); $('bUw').setAttribute('aria-pressed', !!ST.uw);
   document.querySelectorAll('.way').forEach((b, i) => b.setAttribute('aria-pressed', i === ST.way));
   if (xrS) xrS.dirty = true;
   if (PHN.on) phoneSync();
@@ -2570,7 +2583,7 @@ function sync() {
 function initUI() {
   const ways = $('ways');
   WAYS.forEach((w, i) => { const b = document.createElement('button'); b.className = 'way'; b.innerHTML = `<i style="background:${w.sw}"></i>${w.name}`; b.onclick = () => A.way(i); ways.appendChild(b); });
-  $('bGulp').onclick = A.gulp; $('bSwish').onclick = A.swish; $('bOcean').onclick = A.ocean; $('bSwim').onclick = A.swim; $('bLure').onclick = A.lure; $('bJf').onclick = A.jf; $('bEyes').onclick = A.eyes; $('bLight').onclick = A.light; $('bKrill').onclick = A.krill; $('bReset').onclick = A.reset;
+  $('bGulp').onclick = A.gulp; $('bSwish').onclick = A.swish; $('bOcean').onclick = A.ocean; $('bSwim').onclick = A.swim; $('bLure').onclick = A.lure; $('bJf').onclick = A.jf; $('bUw').onclick = A.uw; $('bEyes').onclick = A.eyes; $('bLight').onclick = A.light; $('bKrill').onclick = A.krill; $('bReset').onclick = A.reset;
   $('sFirm').oninput = e => { ST.firm = e.target.value / 100; $('oFirm').textContent = e.target.value; if (xrS) xrS.dirty = true; };
   $('sDamp').oninput = e => { ST.damp = e.target.value / 100; $('oDamp').textContent = e.target.value; if (xrS) xrS.dirty = true; };
   $('sSnd').oninput = e => { sndSet(e.target.value / 100); $('oSnd').textContent = e.target.value; sndStart(); if (xrS) xrS.dirty = true; };
@@ -2634,7 +2647,7 @@ function bindPointer() {
 // ---------------------------------------------------------------- WebXR (WebGPU binding): VR + AR placement + floating menu + hand pinch
 let xrS = null, panelRes = null; const xrErrs = []; let fmt0 = null;
 function setFmt(f) { for (const v of vrs) if (v) destroyVR(v); vrs = []; fmt = f; initPipelines(); panelRes = null; resize(); }
-const PNW = 640, PNH = 1216, PIW = 720, PIH = 380;
+const PNW = 640, PNH = 1296, PIW = 720, PIH = 380;
 const stepItem = (label, y, get, set, extra = {}) => Object.assign({ kind: 'stepper', label, x: 28, y, w: 584, h: 70, get, set }, extra);
 const sizeItem = y => stepItem('Size', y, () => (xrS.pl.scale - 0.06) / 0.24, v => { xrS.pl.scale = 0.06 + v * 0.24; applyPlace(xrS.pl); });
 const turnItem = y => stepItem('Turn', y, () => (((xrS.pl.yaw / (2 * Math.PI)) % 1) + 1) % 1, v => { xrS.pl.yaw = v * 2 * Math.PI; applyPlace(xrS.pl); }, { step: 1 / 12, wrap: true });
@@ -2646,6 +2659,7 @@ const VR_ITEMS = (() => {
   const rows = [['Gulp', A.gulp, null], ['Swish tail', A.swish, () => ST.swishT], ['Light up', A.light, () => ST.luT], ['Ocean gravity', A.ocean, () => ST.ocean], ['Swim', A.swim, () => ST.swim], ['Scatter krill', A.krill, null], ['Reset', A.reset, null]];
   rows.forEach((r, i) => { const col = i % 2, row = (i / 2) | 0; add('btn', r[0], 28 + col * 300, 284, 74, { y: 170 + row * 86, fn: r[1], on: r[2] }); });
   add('stepper', 'Firmness', 28, 584, 70, { y: 526, get: () => ST.firm, set: v => { ST.firm = v; $('sFirm').value = v * 100; $('oFirm').textContent = Math.round(v * 100); } });
+  add('btn', 'Underwater blue', 28, 584, 66, { y: 1216, on: () => ST.uw, fn: A.uw });
   add('stepper', 'Ocean sound', 28, 584, 70, { y: 1136, get: () => SND.vol, set: v => { sndSet(v); sndStart(); $('sSnd').value = Math.round(v * 100); $('oSnd').textContent = Math.round(v * 100); } });
   add('stepper', 'Damping', 28, 584, 70, { y: 606, get: () => ST.damp, set: v => { ST.damp = v; $('sDamp').value = v * 100; $('oDamp').textContent = Math.round(v * 100); } });
   [['¼ speed', 'slow', 'cSlow'], ['Show mesh', 'mesh', 'cMesh'], ['Pause', 'pause', 'cPause']].forEach((t, i) => add('btn', t[0], 28 + i * 200, 190, 66, { y: 696, on: () => ST[t[1]], fn: () => { ST[t[1]] = !ST[t[1]]; $(t[2]).checked = ST[t[1]]; } }));
