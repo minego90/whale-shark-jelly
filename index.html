@@ -169,7 +169,7 @@ body.ph #ph{display:block}
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v23 - 11-09_01:57Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v24 - 11-09_02:01Z</p>
   <p class="vrnote" style="opacity:.6;font-size:11px;margin-top:2px">Body shape based on "Model 99A - Whale Shark" by DigitalLife3D (CC BY-NC 4.0)</p>
  </aside>
 </div>
@@ -300,6 +300,7 @@ const FINS = [
 ].map(makeFin);
 
 function gridSdf(a, y, z) {
+  z = Math.abs(z); // keep the body exactly left/right symmetric
   const M = GRID_META, n = M.n, r = M.res;
   let fx = (a - M.o[0]) / r - 0.5, fy = (y - M.o[1]) / r - 0.5, fz = (z - M.o[2]) / r - 0.5;
   const cx = Math.min(Math.max(fx, 0), n[0] - 1.001), cy = Math.min(Math.max(fy, 0), n[1] - 1.001), cz = Math.min(Math.max(fz, 0), n[2] - 1.001);
@@ -656,7 +657,7 @@ function createWorld(cell) {
   const eyeP = projectSurf([0.30, YM + 0.06, 0.36]); eyeP[2] -= Math.sign(eyeP[2]) * 0.016;
   const spirP = projectSurf([0.60, YOFF + 0.55, 0.16]);
   const outer = new Uint8Array(nv); for (let i = 0; i < L.tri.length; i++) outer[L.tri[i]] = 1;
-  const eyeV = [nearest(eyeP[0], eyeP[1], eyeP[2], v => outer[v] && !L.cavity.has(v)), nearest(eyeP[0], eyeP[1], -eyeP[2], v => outer[v] && !L.cavity.has(v))];
+  const ev0 = nearest(eyeP[0], eyeP[1], Math.abs(eyeP[2]), v => outer[v] && !L.cavity.has(v)), eyeV = [ev0, nearest(L.rest[3 * ev0], L.rest[3 * ev0 + 1], -L.rest[3 * ev0 + 2], v => outer[v] && !L.cavity.has(v))];
   const surfV = []; for (let v = 0; v < nv; v++) if (outer[v]) surfV.push(v);
   const nrm = new Float32Array(nv * 3), bnrm = new Float32Array(nv * 3);
   const RES = H >= 0.055 ? 0.024 : 0.019;
@@ -2540,6 +2541,19 @@ function buildHandColliders(frame, s) {
       for (let i = 0; i < 4; i++) if (k1[i]) add('pm' + i, mid(base[i], k1[i]), 0.016);
     }
     s.hprev.set(src, nx);
+  }
+  if (s.mode === 'play') { // your head is a collider too: a face sphere and a skull sphere that follow the headset
+    const vp = frame.getViewerPose(s.ref);
+    if (vp) {
+      const o = vp.transform.orientation || { x: 0, y: 0, z: 0, w: 1 }, p = vp.transform.position || { x: 0, y: 1.6, z: 0 }, qx = o.x, qy = o.y, qz = o.z, qw = o.w;
+      const f = [-2 * (qx * qz + qw * qy), -2 * (qy * qz - qw * qx), -(1 - 2 * (qx * qx + qy * qy))], u = [2 * (qx * qy - qw * qz), 1 - 2 * (qx * qx + qz * qz), 2 * (qy * qz + qw * qx)];
+      const pv = s.headPrev || new Map(), nx = new Map();
+      [['h0', 0.07, 0.0, 0.082], ['h1', -0.05, 0.03, 0.105], ['h2', -0.02, 0.10, 0.07]].forEach(([key, fz, uz, r]) => {
+        if (n >= 160) return; const w = [p.x + f[0] * fz + u[0] * uz, p.y + f[1] * fz + u[1] * uz, p.z + f[2] * fz + u[2] * uz], q = M4.pt(XR_MI, w), oo = n * 8, old = pv.get(key) || q;
+        CB[oo] = q[0]; CB[oo + 1] = q[1]; CB[oo + 2] = q[2]; CB[oo + 3] = r * 1.1 / sc; CB[oo + 4] = old[0]; CB[oo + 5] = old[1]; CB[oo + 6] = old[2]; n++; nx.set(key, q);
+      });
+      s.headPrev = nx;
+    }
   }
   world.setColliders(CB, n);
 }
