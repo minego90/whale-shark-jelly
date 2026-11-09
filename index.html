@@ -151,6 +151,7 @@ body.ph #ph{display:block}
    <button class="act" id="bLure" aria-pressed="false">Follow my food</button>
    <button class="act" id="bJf" aria-pressed="true">Jellyfish</button>
    <button class="act" id="bUw" aria-pressed="false">Underwater blue</button>
+   <button class="act" id="bCau" aria-pressed="true">Light rays</button>
    <button class="act" id="bKrill">Scatter krill</button>
    <button class="act ghost" id="bReset">Reset</button>
   </div>
@@ -171,7 +172,7 @@ body.ph #ph{display:block}
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v29 - 11-09_03:32Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v30 - 11-09_16:40Z</p>
   <p class="vrnote" style="opacity:.6;font-size:11px;margin-top:2px">Body shape based on "Model 99A - Whale Shark" by DigitalLife3D (CC BY-NC 4.0)</p>
  </aside>
 </div>
@@ -1644,6 +1645,31 @@ const PI: f32 = 3.14159265;
 
 fn lu() -> f32 { return g.camFwd.w; }
 fn keyK() -> f32 { return mix(1.0, 0.14, g.camFwd.w); }
+// underwater caustics: sunlight focused by a moving wavy surface, projected along the light onto everything
+fn causAt(q: vec2<f32>, t: f32) -> f32 {
+  let p = q - vec2<f32>(250.0);
+  var i = p;
+  var c = 1.0;
+  let inten = 0.005;
+  for (var n = 0; n < 4; n = n + 1) {
+    let tt = t * (1.0 - 3.5 / f32(n + 1));
+    i = p + vec2<f32>(cos(tt - i.x) + sin(tt + i.y), sin(tt - i.y) + cos(tt + i.x));
+    c = c + 1.0 / length(vec2<f32>(p.x / (sin(i.x + tt) / inten), p.y / (cos(i.y + tt) / inten)));
+  }
+  c = c / 4.0;
+  c = 1.17 - pow(c, 1.4);
+  return pow(abs(c), 8.0);
+}
+fn caus(P: vec3<f32>) -> f32 {
+  let K = g.pale.w;
+  if (K < 0.001) { return 0.0; }
+  let L = normalize(g.lightDir.xyz);
+  let q = P.xz - L.xz * (P.y / max(L.y, 0.3));
+  let t = g.cam.w * 0.45;
+  let a = causAt(q * 2.6, t);
+  let b = causAt(q * 1.7 + vec2<f32>(3.1, 1.7), t * 0.8 + 11.0);
+  return clamp(a * 0.65 + b * 0.5, 0.0, 1.6) * K;
+}
 
 fn env(d: vec3<f32>) -> vec3<f32> {
   let k = keyK();
@@ -1744,12 +1770,18 @@ struct FloorOut { @location(0) col: vec4<f32>, @builtin(frag_depth) depth: f32 }
     let ring = 1.0 - smoothstep(0.0, 0.02, abs(r - 2.5));
     shade = shade * (1.0 - 0.07 * ring) * (1.0 + 0.03 * (1.0 - smoothstep(0.0, 2.5, r)));
     col = g.bgLow.rgb * mix(vec3<f32>(1.0), shade, near);
+    let cf = caus(P) * (1.0 - smoothstep(3.0, 6.0, r)) * mix(1.0, 0.35, sh.x) * keyd;
+    let cK = g.pale.w * (1.0 - smoothstep(3.0, 6.0, r));
+    col = col * (1.0 - 0.16 * cK) + vec3<f32>(0.85, 0.95, 1.0) * cf * 0.55; // dim the floor a touch so the bright lines read
     if (AR) {
       // passthrough: the floor is invisible, only the (tinted) shadow is drawn over the real surface
       let sd = mix(vec3<f32>(1.0), shade, near);
       let dark = clamp((1.0 - dot(sd, vec3<f32>(0.3333)) - 0.075) * 1.25, 0.0, 1.0) * 0.9;
       col = g.tint.rgb * 0.10;
       alpha = dark;
+      let ca = clamp(cf * 0.55, 0.0, 0.6) * (1.0 - dark);
+      col = mix(col, vec3<f32>(0.80, 0.94, 1.0), ca / max(ca + alpha, 1e-4));
+      alpha = max(alpha, ca);
     }
   } else {
     col = mix(g.bgLow.rgb, g.bgTop.rgb, smoothstep(0.0, 0.5, rd.y));
@@ -1861,6 +1893,7 @@ fn qrot(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
     col = b7 * (0.55 + 0.45 * ndl2 * k) + vec3<f32>(sp * 0.45 * k) + orng * rim7 * fr * 0.35 + pinkA * rim7 * 0.25 + g.glow.rgb * lu() * 0.35 * (0.3 + rim7);
     if (i.shade > 0.515 && i.shade < 0.525) { col = vec3<f32>(0.68, 0.35, 1.0) * (0.75 + 0.35 * ndl2) + vec3<f32>(0.75, 0.70, 1.0) * rim7 * 0.4; }
   }
+  if (i.kind > 1.5) { col = col + vec3<f32>(0.80, 0.93, 1.0) * caus(i.wp) * clamp(N.y * 0.7 + 0.45, 0.0, 1.0) * k * 0.45; }
   return vec4<f32>(col, 1.0);
 }
 
@@ -2080,6 +2113,7 @@ fn markings(p0: vec3<f32>, finw: f32, nrm: vec3<f32>, pf: f32) -> Mk {
   col = mix(col, vec3<f32>(0.90, 0.88, 0.82) * (0.5 + 0.5 * wrap), mk.teeth * 0.28);
   col = mix(col, vec3<f32>(0.01, 0.01, 0.012), mk.spir * 0.92);
 
+  col = col + vec3<f32>(0.80, 0.93, 1.0) * caus(wp) * clamp(N.y * 0.8 + 0.35, 0.0, 1.0) * keyK() * 0.55;
   return vec4<f32>(tonemap(col * g.bgLow.w), 1.0);
 }
 
@@ -2132,6 +2166,7 @@ fn markings(p0: vec3<f32>, finw: f32, nrm: vec3<f32>, pf: f32) -> Mk {
   col = mix(col, vec3<f32>(0.80, 0.90, 1.0) * (0.55 + 0.5 * wrap), layer * (1.0 - smoothstep(0.55, 0.95, t)) * 0.22); // pale bluish sub-umbrella
   col = col + pink * pow(1.0 - ndv, 2.5) * 0.30 + g.glow.rgb * (rimB * 0.3 + glowB * 0.3) * lu() * 1.4;
   let idv = id;
+  col = col + vec3<f32>(0.85, 0.9, 1.0) * caus(wp) * clamp(N.y * 0.8 + 0.35, 0.0, 1.0) * keyK() * 0.22;
   return vec4<f32>(tonemap(col * g.bgLow.w), 1.0);
 }
 
@@ -2263,7 +2298,7 @@ function lureStep(dt) {
   if (d < 0.22 && lure.s > 0.8) { lure.act = false; lure.s = 0; lure.grab = false; lure.wait = 7 + Math.random() * 9; S.huntFree = false; }
 }
 function bodyCentre() { const p = world.pos, n = world.nv; let x = 0, y = 0, z = 0; for (let i = 0; i < n; i++) { x += p[3 * i]; y += p[3 * i + 1]; z += p[3 * i + 2]; } return [x / n, y / n, z / n]; }
-const ST = { uw: false, uwK: 0, jf: true, way: 0, lu: 0, luT: 0, eyeExt: 1, eyeT: 1, swishT: 0, ocean: false, swim: false, kelp: true, gulpT: -1, mesh: false, slow: false, pause: false, twist: false, firm: 0.55, damp: 0.35, nsub: 4, cell: 0.05 };
+const ST = { cau: true, cauK: 1, uw: false, uwK: 0, jf: true, way: 0, lu: 0, luT: 0, eyeExt: 1, eyeT: 1, swishT: 0, ocean: false, swim: false, kelp: true, gulpT: -1, mesh: false, slow: false, pause: false, twist: false, firm: 0.55, damp: 0.35, nsub: 4, cell: 0.05 };
 const cam = { yaw: -0.95, pitch: 0.62, dist: 4.7, tx: 1.35, ty: 0.12, tz: 0 };
 const sm = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
@@ -2416,6 +2451,7 @@ function advance(dtReal) {
   krill.step(dt, steer);
   if (ST.kelp) kelp.step(dt);
   ST.uwK += ((ST.uw ? 1 : 0) - ST.uwK) * Math.min(1, dtReal * 1.5);
+  ST.cauK += ((ST.cau ? 1 : 0) - ST.cauK) * Math.min(1, dtReal * 1.5);
   if (ST.jf) { jf.setSwim(ST.swim); jf.setParams(ST.firm, ST.damp); jf.step(dt); }
   simMs = simMs * 0.9 + (performance.now() - t0) * 0.1;
   adaptT += dtReal;
@@ -2431,7 +2467,7 @@ function writeG(vr, viewProj, camPos, camFwd, off) {
   d.set(viewProj, 0); d.set(M4.inv(viewProj), 16); d.set(lightVP, 32);
   const V = (i, a, b = 0) => { d[48 + i * 4] = a[0]; d[49 + i * 4] = a[1]; d[50 + i * 4] = a[2]; d[51 + i * 4] = b; };
   V(0, camPos, performance.now() / 1000); V(1, camFwd, u); V(2, LIGHT, world.S.flare); V(3, [vr.w, vr.h, 1 / vr.w, 1 / vr.h]);
-  V(4, w.absorb.map(x => x * 1.35), 1.0); V(5, w.tint, ST.uwK); V(6, w.pig, 0.97); V(7, w.pale, 0); V(8, w.milk, (xrS && xrS.ar) || PHN.on ? 1 : 0);
+  V(4, w.absorb.map(x => x * 1.35), 1.0); V(5, w.tint, ST.uwK); V(6, w.pig, 0.97); V(7, w.pale, ST.cauK * (xrS && xrS.ar ? 1.3 : 1)); V(8, w.milk, (xrS && xrS.ar) || PHN.on ? 1 : 0);
   V(9, bg, 1.0);
   V(10, bg.map(x => Math.min(1, u > 0.5 ? x * 1.8 + 0.01 : x * 0.5 + 0.5)), 10);
   V(11, w.glow, 0); V(12, [ST.mesh ? 1 : 0, world.YM - YOFF, world.MOUTH.r[1]], 10);
@@ -2571,11 +2607,12 @@ const A = {
   reset() { world.reset(); krill.clear(); ST.gulpT = -1; ST.swishT = 0; ST.ocean = false; ST.swim = false; ST.lure = false; lure.grab = false; ST.eyeT = 1; ST.luT = 0; jf.reset(); uploadDynamic(); sync(); },
   jf() { ST.jf = !ST.jf; sync(); },
   uw() { ST.uw = !ST.uw; sync(); },
+  cau() { ST.cau = !ST.cau; sync(); },
   way(i) { ST.way = i; sync(); },
 };
 function sync() {
   $('bSwish').setAttribute('aria-pressed', !!ST.swishT); $('bEyes').setAttribute('aria-pressed', !ST.eyeT); $('bEyes').textContent = ST.eyeT ? 'Tuck the eyes' : 'Release the eyes';
-  $('bLight').setAttribute('aria-pressed', !!ST.luT); $('bOcean').setAttribute('aria-pressed', !!ST.ocean); $('bSwim').setAttribute('aria-pressed', !!ST.swim); $('bLure').setAttribute('aria-pressed', !!ST.lure); $('bJf').setAttribute('aria-pressed', !!ST.jf); $('bUw').setAttribute('aria-pressed', !!ST.uw);
+  $('bLight').setAttribute('aria-pressed', !!ST.luT); $('bOcean').setAttribute('aria-pressed', !!ST.ocean); $('bSwim').setAttribute('aria-pressed', !!ST.swim); $('bLure').setAttribute('aria-pressed', !!ST.lure); $('bJf').setAttribute('aria-pressed', !!ST.jf); $('bUw').setAttribute('aria-pressed', !!ST.uw); $('bCau').setAttribute('aria-pressed', !!ST.cau);
   document.querySelectorAll('.way').forEach((b, i) => b.setAttribute('aria-pressed', i === ST.way));
   if (xrS) xrS.dirty = true;
   if (PHN.on) phoneSync();
@@ -2583,7 +2620,7 @@ function sync() {
 function initUI() {
   const ways = $('ways');
   WAYS.forEach((w, i) => { const b = document.createElement('button'); b.className = 'way'; b.innerHTML = `<i style="background:${w.sw}"></i>${w.name}`; b.onclick = () => A.way(i); ways.appendChild(b); });
-  $('bGulp').onclick = A.gulp; $('bSwish').onclick = A.swish; $('bOcean').onclick = A.ocean; $('bSwim').onclick = A.swim; $('bLure').onclick = A.lure; $('bJf').onclick = A.jf; $('bUw').onclick = A.uw; $('bEyes').onclick = A.eyes; $('bLight').onclick = A.light; $('bKrill').onclick = A.krill; $('bReset').onclick = A.reset;
+  $('bGulp').onclick = A.gulp; $('bSwish').onclick = A.swish; $('bOcean').onclick = A.ocean; $('bSwim').onclick = A.swim; $('bLure').onclick = A.lure; $('bJf').onclick = A.jf; $('bUw').onclick = A.uw; $('bCau').onclick = A.cau; $('bEyes').onclick = A.eyes; $('bLight').onclick = A.light; $('bKrill').onclick = A.krill; $('bReset').onclick = A.reset;
   $('sFirm').oninput = e => { ST.firm = e.target.value / 100; $('oFirm').textContent = e.target.value; if (xrS) xrS.dirty = true; };
   $('sDamp').oninput = e => { ST.damp = e.target.value / 100; $('oDamp').textContent = e.target.value; if (xrS) xrS.dirty = true; };
   $('sSnd').oninput = e => { sndSet(e.target.value / 100); $('oSnd').textContent = e.target.value; sndStart(); if (xrS) xrS.dirty = true; };
@@ -2659,7 +2696,8 @@ const VR_ITEMS = (() => {
   const rows = [['Gulp', A.gulp, null], ['Swish tail', A.swish, () => ST.swishT], ['Light up', A.light, () => ST.luT], ['Ocean gravity', A.ocean, () => ST.ocean], ['Swim', A.swim, () => ST.swim], ['Scatter krill', A.krill, null], ['Reset', A.reset, null]];
   rows.forEach((r, i) => { const col = i % 2, row = (i / 2) | 0; add('btn', r[0], 28 + col * 300, 284, 74, { y: 170 + row * 86, fn: r[1], on: r[2] }); });
   add('stepper', 'Firmness', 28, 584, 70, { y: 526, get: () => ST.firm, set: v => { ST.firm = v; $('sFirm').value = v * 100; $('oFirm').textContent = Math.round(v * 100); } });
-  add('btn', 'Underwater blue', 28, 584, 66, { y: 1216, on: () => ST.uw, fn: A.uw });
+  add('btn', 'Underwater blue', 28, 284, 66, { y: 1216, on: () => ST.uw, fn: A.uw });
+  add('btn', 'Light rays', 328, 284, 66, { y: 1216, on: () => ST.cau, fn: A.cau });
   add('stepper', 'Ocean sound', 28, 584, 70, { y: 1136, get: () => SND.vol, set: v => { sndSet(v); sndStart(); $('sSnd').value = Math.round(v * 100); $('oSnd').textContent = Math.round(v * 100); } });
   add('stepper', 'Damping', 28, 584, 70, { y: 606, get: () => ST.damp, set: v => { ST.damp = v; $('sDamp').value = v * 100; $('oDamp').textContent = Math.round(v * 100); } });
   [['¼ speed', 'slow', 'cSlow'], ['Show mesh', 'mesh', 'cMesh'], ['Pause', 'pause', 'cPause']].forEach((t, i) => add('btn', t[0], 28 + i * 200, 190, 66, { y: 696, on: () => ST[t[1]], fn: () => { ST[t[1]] = !ST[t[1]]; $(t[2]).checked = ST[t[1]]; } }));
