@@ -1,5 +1,6 @@
 # Historial de versiones (git, más reciente primero)
 
+- **2026-11-09** — v35: Scatter krill suelta menos (60, luego 35–49) y solo cuando se comió la tanda anterior
 - **2026-11-09** — v34: onda de color más visible (también en tentáculos), colisión de dedos barrida para que no atraviesen las medusas
 - **2026-11-09** — v33: medusas se quedan quietas donde están al apagar Swim (pulsan en su sitio solo con Swish tail)
 - **2026-11-09** — v32: Scatter krill como interruptor con lluvia periódica, paredes/techo (planos AR reales o cuarto virtual), velo azul en AR, onda de color al tocar medusas

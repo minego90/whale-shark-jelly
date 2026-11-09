@@ -256,7 +256,8 @@ function advance(dtReal) {
   if (ST.kelp) kelp.step(dt);
   ST.uwK += ((ST.uw ? 1 : 0) - ST.uwK) * Math.min(1, dtReal * 1.5);
   ST.cauK += ((ST.cau ? 1 : 0) - ST.cauK) * Math.min(1, dtReal * 1.5);
-  if (ST.krillOn && !ST.pause) { ST.kWait -= dtReal; if (ST.kWait <= 0) { krillDrop(28 + (Math.random() * 26 | 0)); ST.kWait = 14 + Math.random() * 18; } } // keeps feeding: a new handful now and then
+  if (ST.krillOn && !ST.pause) ST.kStall = krill.n <= 8 ? (ST.kStall || 0) + dtReal : 0; // a few stragglers it never catches don't block the next feed
+  if (ST.krillOn && !ST.pause && (krill.n <= 2 || ST.kStall > 40)) { ST.kWait -= dtReal; if (ST.kWait <= 0) { krillDrop(35 + (Math.random() * 15 | 0)); ST.kWait = 5 + Math.random() * 4; ST.kStall = 0; } } // next handful only once the last one is eaten
   if (ST.jf) { jf.setSwim(ST.swim, !!ST.swishT); jf.setParams(ST.firm, ST.damp); jf.step(dt); }
   simMs = simMs * 0.9 + (performance.now() - t0) * 0.1;
   adaptT += dtReal;
@@ -410,7 +411,7 @@ const A = {
   lure() { ST.lure = !ST.lure; if (ST.lure) { if (!ST.ocean) { ST.ocean = true; for (let i = 0; i < world.nv; i++) world.vel[3 * i + 1] += 0.45; } ST.swim = true; lure.act = false; lure.s = 0; lure.wait = 1.2; } else lure.grab = false; sync(); },
   eyes() { ST.eyeT = ST.eyeT ? 0 : 1; sync(); },
   light() { ST.luT = ST.luT ? 0 : 1; sync(); },
-  krill() { ST.krillOn = !ST.krillOn; if (ST.krillOn) { krillDrop(110); ST.kWait = 14 + Math.random() * 14; } sync(); },
+  krill() { ST.krillOn = !ST.krillOn; if (ST.krillOn) { krillDrop(60); ST.kWait = 5 + Math.random() * 4; } sync(); },
   reset() { world.reset(); krill.clear(); ST.gulpT = -1; ST.swishT = 0; ST.ocean = false; ST.swim = false; ST.lure = false; lure.grab = false; ST.eyeT = 1; ST.luT = 0; ST.krillOn = false; jf.reset(); uploadDynamic(); sync(); },
   jf() { ST.jf = !ST.jf; sync(); },
   uw() { ST.uw = !ST.uw; sync(); },
