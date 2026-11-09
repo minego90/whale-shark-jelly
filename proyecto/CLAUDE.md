@@ -1,6 +1,6 @@
 # CLAUDE.md — Whale Shark Jelly (notas completas para Claude)
 
-Este archivo es el "cerebro" del proyecto: léelo completo antes de tocar código. Resume todo lo que se construyó en la sesión de Claude (nov 7–9, 2026, versiones v1 → v31), cómo está armado, cómo compilar/probar/publicar, las decisiones tomadas y lo que falta.
+Este archivo es el "cerebro" del proyecto: léelo completo antes de tocar código. Lee también `docs/NOVEDADES_v32-v36.md` (lo último que se mejoró) y `docs/GUIA_DE_USO.md` (todo lo que el usuario puede hacer: agarrar, mover, botones, manos, panel). Resume todo lo que se construyó en la sesión de Claude (nov 7–9, 2026, versiones v1 → v36), cómo está armado, cómo compilar/probar/publicar, las decisiones tomadas y lo que falta.
 
 ## 1. Qué es
 
@@ -40,7 +40,7 @@ tests/sim/*.js      pruebas de física en Node (usan src/core_node.js generado p
 tests/browser/      snap.py (captura headless), xrtest.py (simula sesión XR), cv.sh (atajo de cámara)
 tools/bake/         cómo se generó el volumen del cuerpo desde el modelo glTF
 reference/          imágenes de referencia que mandó el usuario, licencia del modelo, vistas del modelo
-docs/               historial de versiones, capturas
+docs/               HISTORIAL.md, NOVEDADES_v32-v36.md, GUIA_DE_USO.md, capturas
 ```
 
 Orden de concatenación (importa, todo es un `<script type="module">`):
@@ -50,16 +50,16 @@ Orden de concatenación (importa, todo es un `<script type="module">`):
 
 ```bash
 cd src
-echo 32 > VERSION          # subir versión al publicar
+echo 37 > VERSION          # subir versión al publicar
 ./build.sh                 # -> dist/index.html, imprime SYNTAX_OK y la versión
 node ../tests/sim/tjf.js   # pruebas de física (ver §8)
 ```
 Abrir `dist/index.html` en Chrome con WebGPU (o servir con `python3 -m http.server`). Para el Quest hace falta HTTPS → GitHub Pages:
 ```bash
 git clone https://github.com/minego90/whale-shark-jelly && cp dist/index.html whale-shark-jelly/index.html
-cd whale-shark-jelly && git add -A && git commit -m "v32: ..." && git push
+cd whale-shark-jelly && git add -A && git commit -m "v37: ..." && git push
 ```
-Pages tarda ~1–2 min. Decirle al usuario el string exacto "Build v32 - …Z".
+Pages tarda ~1–2 min. Decirle al usuario el string exacto "Build v37 - …Z".
 
 Pruebas de navegador (necesitan `pip install playwright pillow numpy` y Chrome; en Mac: `CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"`):
 ```bash
@@ -93,7 +93,7 @@ python3 tests/browser/xrtest.py /tmp/xr.png      # sesión XR falsa (AR place/pl
   - Colores: degradado azul (corona) → violeta (borde) en `fsJfish`; tentáculos lila.
   - Botón "Jellyfish" las muestra/oculta (`ST.jf`). Costo ≈ 2.5 ms/frame en PC.
 - **Sonido** (audio.js): ambiente de océano sintetizado, slider `sSnd` y stepper "Ocean sound" en XR. El usuario puede dar un audio real si quiere reemplazarlo.
-- **Underwater blue** (`ST.uw`, uniforme `g.tint.w`): tiñe solo el fondo/piso de azul (más profundo arriba y lejos). En AR no hace nada (el fondo es el cuarto real) — pendiente decidir si se quiere un velo leve en AR.
+- **Underwater blue** (`ST.uw`, uniforme `g.tint.w`): tiñe solo el fondo/piso de azul (más profundo arriba y lejos). En AR pone un velo azul leve sobre el passthrough (desde v32).
 - **Light rays / cáusticas** (`ST.cau`, uniforme `g.pale.w`): patrón calculado UNA vez por frame en una textura 256² tileable (`CAU_WGSL` en app.js, periodo 2π, canales r/g = dos capas con tiempos distintos), muestreada en `caus(P)` (shaders.js) proyectando a lo largo de la luz. Se aplica a piso, tiburón, beads (kelp/krill) y medusas; en AR sobre el piso real (aditivo vía alpha). v30 las calculaba por píxel y era lento en Quest → v31 textura.
 
 ## 6b. Añadido en v32
@@ -121,7 +121,7 @@ python3 tests/browser/xrtest.py /tmp/xr.png      # sesión XR falsa (AR place/pl
 - Uniform G: ver `writeG` — slots V(i): 0 cam+time, 1 camFwd + lu, 2 luz + flare, 3 viewport, 4 absorb, 5 tint (+w = underwater), 6 pig, 7 pale (+w = caustics), 8 milk (+w = AR), 9 bgLow, 10 bgTop, 11 glow, 12 mesh/mouth, 13 ojo, 14 espiráculo, luego perfil.
 - Instancias (12 floats): pos3, kind, quat4, scale3, shade. Kinds: 0 krill viejo/lure, 1 ojo, 2 punto de mano, 3 kelp, 4/5/6 krill (cuerpo/órganos/patas), 7 medusa (tentáculo shade<0.5, volante ≥0.5, manubrio ≈0.52).
 - Paletas `WAYS` (Ocean, Lagoon, Dusk, Coral): absorb/tint/pig/pale/milk/glow/bg.
-- **XR en Quest**: Quest Browser no tiene XRGPUBinding → se renderiza con WebGPU a un canvas offscreen por ojo y se copia a una capa WebGL XR ("puente", `makeBridge/bridgeBegin/bridgeEnd`). `#gpu` fuerza binding nativo donde exista. Panel XR dibujado en canvas 2D (PNW 640 × PNH 1296) como textura; items en `VR_ITEMS` (`add('btn'|'stepper'|..., label, x, w, h, {y, on, fn})`).
+- **XR en Quest**: Quest Browser no tiene XRGPUBinding → se renderiza con WebGPU a un canvas offscreen por ojo y se copia a una capa WebGL XR ("puente", `makeBridge/bridgeBegin/bridgeEnd`). `#gpu` fuerza binding nativo donde exista. Panel XR dibujado en canvas 2D (PNW 640 × PNH 1400, barra para mover en BAR_Y) como textura; items en `VR_ITEMS` (`add('btn'|'stepper'|..., label, x, w, h, {y, on, fn})`).
 - Colisionadores XR: articulaciones/huesos/palma de ambas manos + esferas de cabeza (getViewerPose).
 
 ## 8. Pruebas existentes (tests/sim, Node)
@@ -130,6 +130,7 @@ python3 tests/browser/xrtest.py /tmp/xr.png      # sesión XR falsa (AR place/pl
 - `twan.js` recorrido de medusas en 60 s, rango ocupado, separación. `tjy.js` altura/fracción cerca del piso.
 - `tjg.js` agarre de medusa + firmeza. `tor.js` brazos orales cuelgan debajo.
 - `tflip.js` tiburón volteado se endereza en piso/océano/nado. `tsw.js` nado: altura y cabeceo.
+- `troom.js`/`troom2.js` paredes y techo (virtual y planos). `trip.js` onda de color. `thold.js` medusas quietas al apagar Swim. `tpoke.js` dedo rápido no atraviesa.
 - `t9–t17` regresiones del tiburón (lattice, boca, ojos…). Ejecutar desde cualquier lado: leen `src/core_node.js` (generado por build.sh).
 
 ## 9. Modelo de referencia y horneado (tools/bake)
@@ -139,9 +140,8 @@ Pipeline: `extract_mesh.py` (glTF → P.npy/T.npy, verificado idéntico) → `vo
 
 ## 10. Pendientes / ideas
 
-- Verificar en Quest: rendimiento con medusas + cáusticas (v31), sonido, picos dentro de la boca al jalar la mandíbula (render-cavity = lattice-cavity desde v20, sin confirmar).
+- Verificar en Quest (nada de v27–v36 se ha confirmado en el visor por Claude): rendimiento con medusas + cáusticas, paredes reales (plane-detection), toque con el dedo en el panel y su distancia, colisión barrida de dedos, sonido, picos dentro de la boca al jalar la mandíbula (render-cavity = lattice-cavity desde v20, sin confirmar).
 - `GL error 1281` en el puente XR: causa raíz desconocida (no rompe).
 - Cáusticas "paso 2" (idea acordada): en AR proyectarlas sobre paredes/muebles usando **WebXR depth-sensing** (Quest 3/3S, solo GPU, 30 fps) o **mesh-detection** (malla del cuarto). Requiere hacerlo del lado WebGL del puente.
-- Underwater blue en AR: opcional velo azul leve sobre passthrough (preguntar al usuario).
 - Audio real de océano si el usuario lo provee.
 - Licencia NC: si se usa en clases pagas, cambiar a un modelo propio/licenciado.

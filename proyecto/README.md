@@ -2,8 +2,9 @@
 
 Tiburón ballena de gelatina (soft-body) con medusas, krill, kelp, sonido de océano y cáusticas, para PC (WebGPU) y Meta Quest 3/3S (WebXR AR/VR).
 
-- **Ver en vivo:** https://minego90.github.io/whale-shark-jelly/ (última versión: v31)
+- **Ver en vivo:** https://minego90.github.io/whale-shark-jelly/ (última versión: v36)
 - **Abrir local:** `dist/index.html` en Chrome (WebGPU).
+- **Qué se puede hacer (agarrar, mover, botones, manos, panel):** `docs/GUIA_DE_USO.md` · **Lo nuevo:** `docs/NOVEDADES_v32-v36.md`
 - **Para Claude (en cualquier computador):** abre esta carpeta y lee primero **CLAUDE.md** — tiene la arquitectura completa, cómo compilar/probar/publicar, decisiones y pendientes.
 
 ## Contenido
