@@ -257,7 +257,7 @@ function advance(dtReal) {
   ST.uwK += ((ST.uw ? 1 : 0) - ST.uwK) * Math.min(1, dtReal * 1.5);
   ST.cauK += ((ST.cau ? 1 : 0) - ST.cauK) * Math.min(1, dtReal * 1.5);
   if (ST.krillOn && !ST.pause) { ST.kWait -= dtReal; if (ST.kWait <= 0) { krillDrop(28 + (Math.random() * 26 | 0)); ST.kWait = 14 + Math.random() * 18; } } // keeps feeding: a new handful now and then
-  if (ST.jf) { jf.setSwim(ST.swim); jf.setParams(ST.firm, ST.damp); jf.step(dt); }
+  if (ST.jf) { jf.setSwim(ST.swim, !!ST.swishT); jf.setParams(ST.firm, ST.damp); jf.step(dt); }
   simMs = simMs * 0.9 + (performance.now() - t0) * 0.1;
   adaptT += dtReal;
   if (adaptT > 0.6) { adaptT = 0; if (simMs > 17 && ST.nsub > 2) ST.nsub--; else if (simMs < 7 && ST.nsub < 5) ST.nsub++; }

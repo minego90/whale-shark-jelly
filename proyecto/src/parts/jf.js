@@ -213,8 +213,9 @@ function createJellies(world) {
   let swimOn = false, tm = 0;
   J.firm = 0.55; J.damp = 0.35;
   J.setParams = (f, d) => { J.firm = f; J.damp = d; };
-  J.setSwim = v => { swimOn = !!v; };
-  J.reset = () => { grabs.clear(); for (let j = 0; j < NJ; j++) place(j, 1.25 + 0.2 * j); J.active = 0; swimOn = false; skin(); };
+  let hold = false, swish = false; // hold: swim switched off -> stay put where they are (pulse in place only while the shark swishes its tail)
+  J.setSwim = (v, sw) => { v = !!v; if (swimOn && !v) { hold = true; const c = J.centres(); for (let j = 0; j < NJ; j++) { B[j].anc = c[j]; B[j].free = 0; } } if (v) hold = false; swimOn = v; swish = !!sw; };
+  J.reset = () => { grabs.clear(); for (let j = 0; j < NJ; j++) place(j, 1.25 + 0.2 * j); J.active = 0; swimOn = false; hold = false; skin(); };
   function skin() {
     for (let j = 0; j < NJ; j++) J.pos.set(B[j].p, j * NV * 3);
     for (let j = 0; j < NJ; j++) {
@@ -229,14 +230,23 @@ function createJellies(world) {
   }
   J.step = (dt) => {
     dt = Math.min(dt, 1 / 30); tm += dt;
-    J.active += ((swimOn ? 1 : 0) - J.active) * Math.min(1, dt * (swimOn ? 0.9 : 3)); const act = J.active;
+    J.active += ((swimOn || hold ? 1 : 0) - J.active) * Math.min(1, dt * (swimOn || hold ? 0.9 : 3)); const act = J.active;
     updateShark(); const hc = world.cols();
     const cen = []; for (let j = 0; j < NJ; j++) { const p = B[j].p; let x = 0, y = 0, z = 0; for (let i = 0; i < NV; i++) { x += p[3 * i]; y += p[3 * i + 1]; z += p[3 * i + 2]; } cen.push([x / NV, y / NV, z / NV]); }
     const NSUB = 3, h = dt / NSUB;
     for (let j = 0; j < NJ; j++) {
       const b = B[j], c0 = cen[j];
       // pulse + steering
-      if (act > 0.35) {
+      if (act > 0.35 && hold) {
+        let held = false; for (const g of grabs.values()) if (g.j === j) held = true;
+        if (held) b.free = 1.5; else if (b.free > 0) b.free -= dt;
+        if (held || b.free > 0 || !b.anc) b.anc = c0.slice(); // moved/thrown by a hand: settle where it ends up
+        if (swish) { b.ph += dt / b.per; const x = b.ph % 1, cc = x < 0.28 ? sm(0, 1, x / 0.28) : 1 - sm(0, 1, (x - 0.28) / 0.72); b.pc = cc; b.c = cc; }
+        else { b.c *= Math.max(0, 1 - dt * 3); b.pc = b.c; }
+        const kk = Math.min(1, dt * 1.2); b.ub = norm([b.ub[0] * (1 - kk), b.ub[1] + (1 - b.ub[1]) * kk, b.ub[2] * (1 - kk)]);
+        const ks = swish ? 2.0 : 3.0, kd = Math.exp(-(swish ? 1.2 : 3.5) * dt), ax = (b.anc[0] - c0[0]) * ks * dt, ay = (b.anc[1] - c0[1]) * ks * dt + 0.135 * dt, az = (b.anc[2] - c0[2]) * ks * dt;
+        for (let i = 0; i < NV; i++) { b.v[3 * i] = b.v[3 * i] * kd + ax; b.v[3 * i + 1] = b.v[3 * i + 1] * kd + ay; b.v[3 * i + 2] = b.v[3 * i + 2] * kd + az; }
+      } else if (act > 0.35) {
         b.ph += dt / b.per; const x = b.ph % 1, cc = x < 0.28 ? sm(0, 1, x / 0.28) : 1 - sm(0, 1, (x - 0.28) / 0.72);
         const dc = Math.max(0, cc - b.pc); b.pc = cc; b.c = cc;
         // wander between random waypoints spread over the whole dish, each chosen away from the other jellies

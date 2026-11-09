@@ -34,7 +34,7 @@ src/
   parts/audio.js    ambiente de océano sintetizado (WebAudio)
   parts/phone.js    modo cámara de teléfono (AR con MediaPipe) — OCULTO desde v15
   build.sh          concatena todo -> ../dist/index.html, pone la versión, chequea sintaxis, genera core_node.js
-  VERSION           número de versión actual (32)
+  VERSION           número de versión actual (33)
 (dist/ no va en el repo: el build publicado es /index.html en la raíz)
 tests/sim/*.js      pruebas de física en Node (usan src/core_node.js generado por build.sh)
 tests/browser/      snap.py (captura headless), xrtest.py (simula sesión XR), cv.sh (atajo de cámara)
@@ -101,6 +101,9 @@ python3 tests/browser/xrtest.py /tmp/xr.png      # sesión XR falsa (AR place/pl
 - **Paredes y techo** (`ROOM` + `roomPush(P, i, r, V)` en core.js): tiburón (cada vértice por sub-paso), medusas (campana y tentáculos) y krill chocan. En AR se pide `plane-detection` (opcional) y `roomFromXR` convierte los planos reales a unidades de escena cada 20 frames (normal orientada hacia la cabeza, se ignora el plano donde está el plato, extents del polígono + 5 cm). Si hay menos de 2 planos o no es AR → cuarto virtual: cilindro R y techo H (PC: R 7.5, H 5.5 unidades; XR: 2.2 m y 2.5 m convertidos con la escala). El panel XR muestra "walls N".
 - **Underwater blue en AR**: velo azul leve (alpha ≈0.3) sobre el passthrough en `fsFloor`; los objetos virtuales no se tiñen.
 - **Onda de color al tocar medusas**: cada toque (mano XR o agarre) registra un evento por medusa (máx. 4, cada ≥0.28 s); `ripple()` calcula por vértice un anillo que se expande (0.28 u/s, ~1.6 s) + destello local, y lo escribe en `rest4.w`, que se sube cada frame (`buf.jrest`). `fsJfish` lo pinta aqua↔rosado y vuelve al color normal.
+
+## 6c. Añadido en v33
+- **Medusas en modo "hold"**: al apagar Swim (después de haber nadado) ya no caen; cada una se queda anclada donde estaba (`b.anc`, resorte + amortiguación, flotación neutra). Si **Swish tail** está activo pulsan en su sitio; si no, quedan quietas y relajadas. Si la mano la mueve/lanza, se re-ancla donde termina (1.5 s). Reset → vuelven al piso; Swim otra vez → vuelven a pasear. `J.setSwim(swim, swish)`.
 
 ## 7. Render (app.js + shaders.js)
 

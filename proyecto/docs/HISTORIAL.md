@@ -1,5 +1,6 @@
 # Historial de versiones (git, más reciente primero)
 
+- **2026-11-09** — v33: medusas se quedan quietas donde están al apagar Swim (pulsan en su sitio solo con Swish tail)
 - **2026-11-09** — v32: Scatter krill como interruptor con lluvia periódica, paredes/techo (planos AR reales o cuarto virtual), velo azul en AR, onda de color al tocar medusas
 - **2026-11-09 12:05** — Add full project source, notes (CLAUDE.md), tests and bake tools under proyecto/
 - **2026-11-09 11:57** — v31: caustics baked once per frame into a 256px tileable texture (was per-pixel loops), stronger underwater-blue backdrop, near-neutral jellyfish buoyancy
