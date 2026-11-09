@@ -169,7 +169,7 @@ body.ph #ph{display:block}
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v22 - 11-09_01:51Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v23 - 11-09_01:57Z</p>
   <p class="vrnote" style="opacity:.6;font-size:11px;margin-top:2px">Body shape based on "Model 99A - Whale Shark" by DigitalLife3D (CC BY-NC 4.0)</p>
  </aside>
 </div>
@@ -594,7 +594,7 @@ function bindMesh(P, L, H0) {
   return { bi, bw };
 }
 function buildEmbedded(L, h, f, projIts, smoothPasses) {
-  const bx0 = -0.16, by0 = -2 * h, bz0 = -0.95, nx = Math.ceil(3.75 / h), ny = Math.ceil(0.95 / h), nz = Math.ceil(1.9 / h);
+  const bx0 = -0.16, by0 = -2 * h, bz0 = -0.95, nx = Math.ceil(3.75 / h), ny = Math.ceil(1.1 / h), nz = Math.ceil(1.9 / h);
   const m = surfaceNets(f, bx0, by0, bz0, nx, ny, nz, h);
   projectToSdf(f, m.P, 0.003, projIts); if (smoothPasses) smoothMesh(m.P, m.T, f, smoothPasses, 0.35);
   orientOutward(m.P, m.T, f);
