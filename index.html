@@ -168,7 +168,7 @@ body.ph #ph{display:block}
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v16 - 11-09_00:59Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v17 - 11-09_01:09Z</p>
  </aside>
 </div>
 
@@ -192,11 +192,12 @@ body.ph #ph{display:block}
 'use strict';
 let H = 0.04, YM = 0.10;
 const LB = 3.0, G_ACC = 14.0, FLOOR_MU = 0.35;
-const MOUTH = { c: [0.02, 0.10, 0.0], r: [0.24, 0.03, 0.205] };
+const MOUTH = { c: [0.02, 0.10, 0.0], r: [0.26, 0.03, 0.25] };
 const PROFILE = [
-  [0.00, 0.215, 0.200], [0.04, 0.255, 0.235], [0.10, 0.282, 0.275], [0.20, 0.288, 0.310],
-  [0.28, 0.274, 0.312], [0.40, 0.230, 0.275], [0.54, 0.178, 0.222], [0.68, 0.132, 0.172],
-  [0.80, 0.098, 0.132], [0.88, 0.080, 0.110], [0.96, 0.070, 0.098], [1.00, 0.064, 0.092]];
+  [0.000, 0.230, 0.130], [0.047, 0.330, 0.230], [0.093, 0.360, 0.310], [0.137, 0.370, 0.380],
+  [0.183, 0.375, 0.450], [0.227, 0.375, 0.480], [0.273, 0.370, 0.500], [0.370, 0.330, 0.470],
+  [0.457, 0.250, 0.430], [0.547, 0.210, 0.370], [0.637, 0.170, 0.310], [0.727, 0.145, 0.260],
+  [0.817, 0.120, 0.170], [0.907, 0.090, 0.110], [1.000, 0.055, 0.070]];
 const PT = PROFILE.map(r => r[0]), PW = PROFILE.map(r => r[1]), PH = PROFILE.map(r => r[2]);
 const smooth = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
 const smin = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; };
@@ -268,21 +269,21 @@ function finSdf(f, x, y, z, tk = 1, tmin = 0) {
 }
 const FINS = [
   // first dorsal: far back, swept; second dorsal: small
-  { name: 'dorsal1', O: [1.22, 0.14, 0], S: [0.40, 1, 0], Cd: [1, 0, 0], Sp: 0.46, C: 0.34, tipP: 0.30 },
-  { name: 'dorsal2', O: [2.05, 0.06, 0], S: [0.45, 1, 0], Cd: [1, 0, 0], Sp: 0.19, C: 0.17, tipP: 0.12 },
+  { name: 'dorsal1', O: [1.55, 0.22, 0], S: [0.37, 1, 0], Cd: [1, 0, 0], Sp: 0.46, C: 0.40, tipP: 0.24 },
+  { name: 'dorsal2', O: [2.28, 0.14, 0], S: [0.45, 1, 0], Cd: [1, 0, 0], Sp: 0.16, C: 0.15, tipP: 0.09 },
   // long sickle pectorals
-  { name: 'pectL', flat: 1, O: [0.80, 0, 0.20], S: [0.34, 0, 1], Cd: [1, 0, 0], Sp: 0.74, C: 0.30, tipP: 0.50 },
-  { name: 'pectR', flat: 1, O: [0.80, 0, -0.20], S: [0.34, 0, -1], Cd: [1, 0, 0], Sp: 0.74, C: 0.30, tipP: 0.50 },
+  { name: 'pectL', flat: 1, O: [0.92, 0, 0.25], S: [0.12, 0, 1], Cd: [1, 0, 0], Sp: 0.50, C: 0.45, tipP: 0.29 },
+  { name: 'pectR', flat: 1, O: [0.92, 0, -0.25], S: [0.12, 0, -1], Cd: [1, 0, 0], Sp: 0.50, C: 0.45, tipP: 0.29 },
   // pelvics, anal
-  { name: 'pelvL', flat: 1, O: [1.55, 0, 0.10], S: [0.45, 0, 1], Cd: [1, 0, 0], Sp: 0.22, C: 0.17, tipP: 0.13 },
-  { name: 'pelvR', flat: 1, O: [1.55, 0, -0.10], S: [0.45, 0, -1], Cd: [1, 0, 0], Sp: 0.22, C: 0.17, tipP: 0.13 },
-  { name: 'anal', flat: 1, O: [2.0, 0, 0.05], S: [0.5, 0, 1], Cd: [1, 0, 0], Sp: 0.17, C: 0.14, tipP: 0.09 },
+  { name: 'pelvL', flat: 1, O: [2.05, 0, 0.08], S: [0.45, 0, 1], Cd: [1, 0, 0], Sp: 0.22, C: 0.17, tipP: 0.13 },
+  { name: 'pelvR', flat: 1, O: [2.05, 0, -0.08], S: [0.45, 0, -1], Cd: [1, 0, 0], Sp: 0.22, C: 0.17, tipP: 0.13 },
+  { name: 'anal', flat: 1, O: [2.38, 0, 0.04], S: [0.5, 0, 1], Cd: [1, 0, 0], Sp: 0.17, C: 0.14, tipP: 0.09 },
   // caudal keels
   { name: 'keelL', flat: 1, O: [2.70, 0, 0.04], S: [0.4, 0, 1], Cd: [1, 0, 0], Sp: 0.09, C: 0.18, tipP: 0.12 },
   { name: 'keelR', flat: 1, O: [2.70, 0, -0.04], S: [0.4, 0, -1], Cd: [1, 0, 0], Sp: 0.09, C: 0.18, tipP: 0.12 },
   // tall crescent tail: upper lobe + lower lobe along the table
-  { name: 'tailUp', O: [2.74, 0.02, 0], S: [0.28, 1, 0], Cd: [1, 0, 0], Sp: 0.64, C: 0.28, tipP: 0.38 },
-  { name: 'tailLo', O: [2.76, 0.0, 0], S: [1, 0.10, 0], Cd: [0, 1, 0], Sp: 0.40, C: 0.19, tipP: 0.12 },
+  { name: 'tailUp', O: [2.74, 0.02, 0], S: [0.28, 1, 0], Cd: [1, 0, 0], Sp: 0.56, C: 0.28, tipP: 0.38 },
+  { name: 'tailLo', O: [2.76, 0.0, 0], S: [1, 0.10, 0], Cd: [0, 1, 0], Sp: 0.34, C: 0.19, tipP: 0.12 },
 ].map(makeFin);
 
 // render surface: thin, elegant fins and a clean terminal mouth (the lattice below only drives it)
@@ -633,8 +634,8 @@ function createWorld(cell) {
   const UF = nearest(0.0, YM + 0.03, 0.02, v => L.cavity.has(v)), LF = nearest(0.0, YM - 0.03, 0.02, v => L.cavity.has(v));
   const UB = nearest(0.24, YM + 0.03, 0.02, v => L.cavity.has(v)), LB_ = nearest(0.24, YM - 0.03, 0.02, v => L.cavity.has(v));
   const projectSurf = (p) => { let [x, y, z] = p; for (let i = 0; i < 6; i++) { const e = 0.003, d = bodySdf(x, y, z); const gx = bodySdf(x + e, y, z) - bodySdf(x - e, y, z), gy = bodySdf(x, y + e, z) - bodySdf(x, y - e, z), gz = bodySdf(x, y, z + e) - bodySdf(x, y, z - e); const gl = (gx * gx + gy * gy + gz * gz) / (4 * e * e); x -= gx / (2 * e) * d / gl; y -= gy / (2 * e) * d / gl; z -= gz / (2 * e) * d / gl; } return [x, y, z]; };
-  const eyeP = projectSurf([0.19, YM + 0.02, 0.30]);
-  const spirP = projectSurf([0.40, 0.30, 0.15]);
+  const eyeP = projectSurf([0.24, YM + 0.03, 0.36]);
+  const spirP = projectSurf([0.55, 0.46, 0.18]);
   const outer = new Uint8Array(nv); for (let i = 0; i < L.tri.length; i++) outer[L.tri[i]] = 1;
   const eyeV = [nearest(eyeP[0], eyeP[1], eyeP[2], v => outer[v] && !L.cavity.has(v)), nearest(eyeP[0], eyeP[1], -eyeP[2], v => outer[v] && !L.cavity.has(v))];
   const surfV = []; for (let v = 0; v < nv; v++) if (outer[v]) surfV.push(v);
@@ -1532,20 +1533,33 @@ fn markings(p0: vec3<f32>, finw: f32, nrm: vec3<f32>, pf: f32) -> Mk {
   let seg = floor(th * R / 0.065);
   let hbrk = step(0.2, hsh(vec2<f32>(j * 3.7 + 11.0, seg)));
   let inBand = smoothstep(0.62, 0.78, a) * (1.0 - smoothstep(2.62, 2.78, a)) * (1.0 - smoothstep(2.0, 2.35, ath)) * bodyW;
-  let hoops = aa(dh, 0.0026, pf) * hbrk * inBand * 0.75;
+  let hoops = aa(dh, 0.0026, pf) * hbrk * inBand * 0.0;
   let aC = (j + 0.5) * D;
-  let jx = (hsh(vec2<f32>(j*1.3+4.0, floor(ath*7.0))) - 0.5) * 0.045;
+  let jx = (hsh(vec2<f32>(j*1.3+4.0, floor(ath*7.0))) - 0.5) * 0.07;
   let dA = a - aC - jx;
-  let dv0 = abs(ath - 0.0) * R;
-  let dv1 = abs(ath - 0.47) * R;
-  let dv2 = abs(ath - 0.82) * R;
-  let dv3 = abs(ath - 1.30) * R;
-  let dv4 = abs(ath - 1.90) * R;
+  let athj = ath + (hsh(vec2<f32>(j * 2.1 + 5.0, 9.0)) - 0.5) * 0.10 + (hsh(vec2<f32>(j * 0.7 + 1.0, 3.0)) - 0.5) * 0.06 * sin(ath * 9.0);
+  let dv0 = abs(athj - 0.0) * R;
+  let dv1 = abs(athj - 0.47) * R;
+  let dv2 = abs(athj - 0.82) * R;
+  let dv3 = abs(athj - 1.30) * R;
+  let dv4 = abs(athj - 1.90) * R;
   let dv = min(min(dv0, dv1), min(min(dv2, dv3), dv4));
   let rs = 0.0165 * clamp(R / 0.16, 0.5, 1.2) * (0.65 + 0.8 * hsh(vec2<f32>(j, floor(ath * 5.0))));
-  let spotD = length(vec2<f32>(dA, dv));
-  let spots = aa(spotD, rs, pf) * inBand * (1.0 - smoothstep(1.7, 2.1, ath));
-  let spotHalo = exp(-(spotD / (rs * 2.4)) * (spotD / (rs * 2.4))) * inBand;
+  let cs = 0.078;
+  let cuv = vec2<f32>(a, th * R) / cs;
+  let cid = floor(cuv);
+  var spotD = 10.0; var rs2 = rs;
+  for (var oy = -1; oy <= 1; oy = oy + 1) { for (var ox = -1; ox <= 1; ox = ox + 1) {
+    let c2 = cid + vec2<f32>(f32(ox), f32(oy));
+    let hj = vec2<f32>(hsh(c2 * 1.37 + 3.1), hsh(c2 * 2.11 + 7.7));
+    let rr2 = (0.008 + 0.012 * hsh(c2 + 17.0)) * clamp(R / 0.16, 0.6, 1.2);
+    let present = step(0.12, hsh(c2 * 0.77 + 5.0));
+    let dd2 = length((c2 + 0.15 + 0.7 * hj) * cs - vec2<f32>(a, th * R)) / rr2;
+    if (present > 0.5 && dd2 < spotD) { spotD = dd2; }
+  } }
+  rs2 = 1.0;
+  let spots = (1.0 - smoothstep(0.82, 1.0, spotD)) * inBand * (1.0 - smoothstep(1.7, 2.1, ath));
+  let spotHalo = exp(-(spotD / 2.4) * (spotD / 2.4)) * inBand;
 
   // small dense spots on head and fins
   let uvb = vec2<f32>(a, th * R);
@@ -1586,7 +1600,7 @@ fn markings(p0: vec3<f32>, finw: f32, nrm: vec3<f32>, pf: f32) -> Mk {
   let tp = vec2<f32>(p0.z, p0.x) / 0.0075;
   let tc = floor(tp) + vec2<f32>(0.5);
   let td = length((tp - tc) * 0.0075);
-  m.teeth = aa(td, 0.0016, pf) * (1.0 - smoothstep(0.04, 0.06, a)) * smoothstep(0.7, 1.1, m.mouth + 0.35) * (1.0 - smoothstep(0.17, 0.2, abs(p0.z))) * step(0.5, m.mouth);
+  m.teeth = 0.0 * aa(td, 0.0016, pf) * (1.0 - smoothstep(0.04, 0.06, a)) * smoothstep(0.7, 1.1, m.mouth + 0.35) * (1.0 - smoothstep(0.17, 0.2, abs(p0.z))) * step(0.5, m.mouth);
 
   // eyes (rim + dark patch) and spiracles
   let eA = g.eyeP.xyz;
