@@ -168,7 +168,7 @@ body.ph #ph{display:block}
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v19 - 11-09_01:29Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v20 - 11-09_01:33Z</p>
   <p class="vrnote" style="opacity:.6;font-size:11px;margin-top:2px">Body shape based on "Model 99A - Whale Shark" by DigitalLife3D (CC BY-NC 4.0)</p>
  </aside>
 </div>
@@ -312,9 +312,9 @@ function gridSdf(a, y, z) {
 // render surface: thin, elegant fins and a clean terminal mouth (the lattice below only drives it)
 function sdfRender(a, y, z) {
   let d = gridSdf(a, y, z) + 0.002;
-  const uz = z / 0.26;
-  const dm = smax(a - 0.10 * Math.sqrt(Math.max(0, 1 - uz * uz)) - 0.01, Math.abs(y - YM) - 0.016, 0.012);
-  d = smax(d, -dm, 0.008);
+  const u = (a - MOUTH.c[0]) / MOUTH.r[0], w = z / MOUTH.r[2];
+  const dm = smax((Math.hypot(u, w) - 1) * 0.16, Math.abs(y - YM) - 0.5 * H, 0.010);
+  d = smax(d, -dm, 0.005);
   return Math.max(d, -y);
 }
 function sdfCore(a, y, z) { // inner milky gel core (belly side), body only
@@ -1149,7 +1149,7 @@ function createKrill(world) {
 
 
 // ---------------------------------------------------------------- seaweed (soft gel strands rooted on the floor)
-const KELP_CLUMPS = 7, KELP_PER = 3, KELP_SEG = 9, KELP_N = KELP_CLUMPS * KELP_PER, KELP_SUB = 4, KELP_INST = KELP_N * (KELP_SEG - 1) * KELP_SUB;
+const KELP_CLUMPS = 7, KELP_PER = 5, KELP_SEG = 9, KELP_N = KELP_CLUMPS * KELP_PER, KELP_SUB = 6, KELP_INST = KELP_N * (KELP_SEG - 1) * KELP_SUB * 2;
 function createKelp(world) {
   const Kp = { n: KELP_N, inst: new Float32Array(KELP_INST * 12), count: 0 };
   const P = new Float32Array(KELP_N * KELP_SEG * 3), Pv = new Float32Array(KELP_N * KELP_SEG * 3), Pp = new Float32Array(KELP_N * KELP_SEG * 3);
@@ -1158,8 +1158,8 @@ function createKelp(world) {
   for (let c = 0; c < KELP_CLUMPS; c++) {
     const th = (c + 0.2 + rnd() * 0.6) / KELP_CLUMPS * 2 * Math.PI, rr = 1.95 + rnd() * 0.4, cx = 1.5 + Math.cos(th) * rr, cz = Math.sin(th) * rr;
     for (let m = 0; m < KELP_PER; m++) {
-      const i = c * KELP_PER + m, bx = cx + (rnd() - 0.5) * 0.28, bz = cz + (rnd() - 0.5) * 0.28, sp = 0.14 + rnd() * 0.08;
-      st.push({ cl: c, bx, bz, sp, w: 0.050 + rnd() * 0.016, ph: rnd() * 6.28, side: [rnd() - 0.5, 0.2, rnd() - 0.5], hue: rnd() });
+      const i = c * KELP_PER + m, bx = cx + (rnd() - 0.5) * 0.22, bz = cz + (rnd() - 0.5) * 0.22, sp = 0.11 + rnd() * 0.11, la = rnd() * 6.283, ls = 0.25 + rnd() * 0.55;
+      st.push({ cl: c, bx, bz, sp, w: 0.042 + rnd() * 0.022, lean: [Math.cos(la) * ls, Math.sin(la) * ls], tw: rnd() * 6.28, ph: rnd() * 6.28, side: [rnd() - 0.5, 0.2, rnd() - 0.5], hue: rnd() });
       for (let j = 0; j < KELP_SEG; j++) { const o = (i * KELP_SEG + j) * 3; P[o] = bx; P[o + 1] = j * sp; P[o + 2] = bz; Pp[o] = bx; Pp[o + 1] = j * sp; Pp[o + 2] = bz; }
     }
   }
@@ -1182,7 +1182,7 @@ function createKelp(world) {
           const k = j / (KELP_SEG - 1), sw = 0.55 * k;
           Pv[o] += (1.1 * Math.sin(tm * 0.8 + y * 2.1 + S.ph) + 0.5 * Math.sin(tm * 1.9 + S.ph * 2 + y * 3)) * sw * h;
           Pv[o + 2] += (1.1 * Math.cos(tm * 0.65 + y * 1.8 + S.ph) + 0.5 * Math.sin(tm * 1.7 + S.ph + y * 2.4)) * sw * h;
-          Pv[o + 1] += 4.0 * h; const dm = Math.exp(-1.9 * h); Pv[o] *= dm; Pv[o + 1] *= dm; Pv[o + 2] *= dm;
+          Pv[o] += S.lean[0] * k * 1.6 * h; Pv[o + 2] += S.lean[1] * k * 1.6 * h; Pv[o + 1] += 4.0 * h; const dm = Math.exp(-1.9 * h); Pv[o] *= dm; Pv[o + 1] *= dm; Pv[o + 2] *= dm;
           Pp[o] = P[o]; Pp[o + 1] = P[o + 1]; Pp[o + 2] = P[o + 2];
           P[o] += Pv[o] * h; P[o + 1] += Pv[o + 1] * h; P[o + 2] += Pv[o + 2] * h;
         }
@@ -1247,11 +1247,21 @@ function createKelp(world) {
         else if (m00 > m11 && m00 > m22) { const t = Math.sqrt(1 + m00 - m11 - m22) * 2; qw = (m21 - m12) / t; qx = t / 4; qy = (m01 + m10) / t; qz = (m02 + m20) / t; }
         else if (m11 > m22) { const t = Math.sqrt(1 + m11 - m00 - m22) * 2; qw = (m02 - m20) / t; qx = (m01 + m10) / t; qy = t / 4; qz = (m12 + m21) / t; }
         else { const t = Math.sqrt(1 + m22 - m00 - m11) * 2; qw = (m10 - m01) / t; qx = (m02 + m20) / t; qy = (m12 + m21) / t; qz = t / 4; }
-        for (let m = 0; m < KELP_SUB; m++) { // overlapping slices -> one continuous ribbon with zebra bands
-          const f = (m + 0.5) / KELP_SUB, o = n * 12, k = 1 - (j + f) / (KELP_SEG - 1) * 0.55, w = S.w * k;
-          I[o] = P[a] + (P[b] - P[a]) * f; I[o + 1] = P[a + 1] + (P[b + 1] - P[a + 1]) * f; I[o + 2] = P[a + 2] + (P[b + 2] - P[a + 2]) * f; I[o + 3] = 3;
-          I[o + 4] = qx; I[o + 5] = qy; I[o + 6] = qz; I[o + 7] = qw; I[o + 8] = l / KELP_SUB * 0.72; I[o + 9] = w * 1.9; I[o + 10] = 0.011;
-          I[o + 11] = ((j * KELP_SUB + m) & 1) ? 0.9 : 0.12; n++;
+        for (let m = 0; m < KELP_SUB; m++) { // overlapping slices -> one smooth tapered blade with a darker midrib
+          const f = (m + 0.5) / KELP_SUB, t = (j + f) / (KELP_SEG - 1);
+          const wprof = t < 0.28 ? 0.45 + 0.55 * Math.sin(t / 0.28 * 1.5708) : Math.pow(Math.max(0, (1 - t) / 0.72), 0.75), w = S.w * 1.35 * Math.max(wprof, 0.04);
+          const tw = S.tw + t * 2.2 + Math.sin(tm * 0.7 + S.ph + t * 3) * 0.35, ct = Math.cos(tw), st_ = Math.sin(tw);
+          const bx_ = sx * ct + zx * st_, by_ = sy * ct + zy * st_, bz_ = sz * ct + zz * st_, cx_ = zx * ct - sx * st_, cy_ = zy * ct - sy * st_, cz_ = zz * ct - sz * st_;
+          let q0, q1, q2, q3; { const m00 = dx, m10 = dy, m20 = dz, m01 = bx_, m11 = by_, m21 = bz_, m02 = cx_, m12 = cy_, m22 = cz_, tr = m00 + m11 + m22;
+            if (tr > 0) { const tt = Math.sqrt(tr + 1) * 2; q3 = tt / 4; q0 = (m21 - m12) / tt; q1 = (m02 - m20) / tt; q2 = (m10 - m01) / tt; }
+            else if (m00 > m11 && m00 > m22) { const tt = Math.sqrt(1 + m00 - m11 - m22) * 2; q3 = (m21 - m12) / tt; q0 = tt / 4; q1 = (m01 + m10) / tt; q2 = (m02 + m20) / tt; }
+            else if (m11 > m22) { const tt = Math.sqrt(1 + m11 - m00 - m22) * 2; q3 = (m02 - m20) / tt; q0 = (m01 + m10) / tt; q1 = tt / 4; q2 = (m12 + m21) / tt; }
+            else { const tt = Math.sqrt(1 + m22 - m00 - m11) * 2; q3 = (m10 - m01) / tt; q0 = (m02 + m20) / tt; q1 = (m12 + m21) / tt; q2 = tt / 4; } }
+          const wv = 0.045 * t * Math.sin(t * 6 + S.ph + tm * 0.9); // gentle S-curve across the blade width
+          const px = P[a] + (P[b] - P[a]) * f + bx_ * wv, py = P[a + 1] + (P[b + 1] - P[a + 1]) * f + by_ * wv, pz = P[a + 2] + (P[b + 2] - P[a + 2]) * f + bz_ * wv;
+          const sh = Math.pow(t, 1.1);
+          let o = n * 12; I[o] = px; I[o + 1] = py; I[o + 2] = pz; I[o + 3] = 3; I[o + 4] = q0; I[o + 5] = q1; I[o + 6] = q2; I[o + 7] = q3; I[o + 8] = l / KELP_SUB * 1.35; I[o + 9] = w; I[o + 10] = 0.0075; I[o + 11] = sh; n++;
+          o = n * 12; I[o] = px; I[o + 1] = py; I[o + 2] = pz; I[o + 3] = 3; I[o + 4] = q0; I[o + 5] = q1; I[o + 6] = q2; I[o + 7] = q3; I[o + 8] = l / KELP_SUB * 1.35; I[o + 9] = w * 0.07; I[o + 10] = 0.0095; I[o + 11] = sh * 0.45; n++;
         }
       }
     }
@@ -1480,7 +1490,7 @@ fn qrot(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
   var pw = 50.0;
   if (i.kind > 0.5) { base = vec3<f32>(0.015, 0.016, 0.02); pw = 220.0; }
   if (i.kind > 1.5) { base = vec3<f32>(0.92, 0.97, 1.0); pw = 60.0; }
-  if (i.kind > 2.5) { base = mix(vec3<f32>(0.03, 0.22, 0.13), vec3<f32>(0.13, 0.46, 0.25), i.shade); pw = 90.0; }
+  if (i.kind > 2.5) { base = mix(vec3<f32>(0.015, 0.075, 0.03), vec3<f32>(0.50, 0.80, 0.16), pow(i.shade, 1.15)); pw = 90.0; }
   let sp = pow(max(dot(N, h), 0.0), pw);
   let fres = pow(1.0 - max(dot(N, V), 0.0), 4.0);
   let ao = mix(0.65, 1.0, smoothstep(0.0, 0.05, i.wp.y));
