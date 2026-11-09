@@ -168,12 +168,12 @@ body.ph #ph{display:block}
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v14 - 11-07_23:42Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v15 - 11-09_00:35Z</p>
  </aside>
 </div>
 
 <video id="phVid" playsinline muted autoplay></video>
-<button id="bCam">Camera AR</button>
+<button id="bCam" hidden style="display:none!important">Camera AR</button>
 <div id="ph">
  <div id="phHint"></div><div id="phRet"></div>
  <div id="phSheet"><div id="phHandle">Menu</div><div id="phBody">
@@ -2730,7 +2730,7 @@ function phoneSync() {
 }
 function phoneBindUI() {
   $('bCam').onclick = phoneStart;
-  if (/#cam/.test(location.hash)) document.body.classList.add('camhash');
+  
   $('phHandle').onclick = () => $('phSheet').classList.toggle('closed');
   const b = (id, fn) => { $(id).onclick = () => { fn(); phoneSync(); }; };
   b('pGulp', A.gulp); b('pSwish', A.swish); b('pOcean', A.ocean); b('pSwim', A.swim); b('pLure', A.lure); b('pKrill', A.krill); b('pLight', A.light); b('pReset', A.reset);
