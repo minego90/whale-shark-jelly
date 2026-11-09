@@ -71,7 +71,7 @@ function createJellies(world) {
   for (let j = 0; j < NJ; j++) {
     for (let i = 0; i < nT * 3; i++) J.tri[j * nT * 3 + i] = tri[i] + j * NV;
     for (let layer = 0; layer < 2; layer++) for (let r = 0; r <= JF_NR; r++) for (let s = 0; s < (r === 0 ? 1 : JF_NS); s++) {
-      const v = (j * NV + (layer ? vi(r, s) : vo(r, s))) * 4; J.rest4[v] = r / JF_NR; J.rest4[v + 1] = s / JF_NS; J.rest4[v + 2] = layer; J.rest4[v + 3] = j;
+      const v = (j * NV + (layer ? vi(r, s) : vo(r, s))) * 4; J.rest4[v] = r / JF_NR; J.rest4[v + 1] = s / JF_NS; J.rest4[v + 2] = layer; J.rest4[v + 3] = 0;
     }
   }
   // ---- per-jelly state
@@ -110,6 +110,22 @@ function createJellies(world) {
     sbb = [x0 - 0.1, y0 - 0.1, z0 - 0.1, x1 + 0.1, y1 + 0.1, z1 + 0.1];
   }
   const PR = 0.017;
+  // colour ripple: every touch sends a ring of colour across the bell, then it fades back
+  function touch(b, v) { if (v >= JF_HALF) v -= JF_HALF; if (tm - (b.lastEv || -9) < 0.28) return; b.lastEv = tm; (b.ev = b.ev || []).push({ v, t0: tm }); if (b.ev.length > 4) b.ev.shift(); }
+  J.touch = (j, v) => touch(B[j], v);
+  function ripple() {
+    for (let j = 0; j < NJ; j++) {
+      const b = B[j], ev = b.ev || []; while (ev.length && tm - ev[0].t0 > 1.6) ev.shift();
+      for (let i = 0; i < NV; i++) {
+        let g = 0;
+        for (const e of ev) {
+          const a = tm - e.t0, v = e.v * 3, dx = S0[3 * i] - S0[v], dy = S0[3 * i + 1] - S0[v + 1], dz = S0[3 * i + 2] - S0[v + 2], d = Math.sqrt(dx * dx + dy * dy + dz * dz), f = d - 0.28 * a;
+          g += Math.exp(-f * f / 0.0012) * (1 - a / 1.6) + Math.exp(-d * d / 0.0016) * Math.max(0, 1 - a * 2.2);
+        }
+        J.rest4[(j * NV + i) * 4 + 3] = Math.min(1, g);
+      }
+    }
+  }
   function collide(b, dt, hc) {
     const p = b.p, bb = sbb, ds = SKR + PR, ds2 = ds * ds;
     for (let i = 0; i < NV; i++) {
@@ -124,10 +140,10 @@ function createJellies(world) {
       for (let h = 0; h < hc.n; h++) {
         const q = h * 8, r = hc.a[q + 3] + PR, dx = x - hc.a[q], dy = y - hc.a[q + 1], dz = z - hc.a[q + 2]; if (dx > r || dx < -r || dy > r || dy < -r || dz > r || dz < -r) continue;
         const d2 = dx * dx + dy * dy + dz * dz; if (d2 >= r * r) continue; const d = Math.sqrt(d2) || 1e-6, k = (r - d) / d;
-        x += dx * k; y += dy * k; z += dz * k;
+        x += dx * k; y += dy * k; z += dz * k; touch(b, i);
       }
       if (y < PR) { y = PR; const mx = x - b.q[o], mz = z - b.q[o + 2]; x = b.q[o] + mx * 0.55; z = b.q[o + 2] + mz * 0.55; }
-      p[o] = x; p[o + 1] = y; p[o + 2] = z;
+      p[o] = x; p[o + 1] = y; p[o + 2] = z; roomPush(p, o, PR);
     }
   }
   function sub(b, dt, act, hc, centre, ub) {
@@ -189,7 +205,7 @@ function createJellies(world) {
         const a = base + (s - 1) * 3, o = base + s * 3, dx = P[o] - P[a], dy = P[o + 1] - P[a + 1], dz = P[o + 2] - P[a + 2], d = Math.hypot(dx, dy, dz) || 1e-6, k = (d - len) / d;
         if (s === 1) { P[o] -= dx * k; P[o + 1] -= dy * k; P[o + 2] -= dz * k; } else { P[a] += dx * k * 0.5; P[a + 1] += dy * k * 0.5; P[a + 2] += dz * k * 0.5; P[o] -= dx * k * 0.5; P[o + 1] -= dy * k * 0.5; P[o + 2] -= dz * k * 0.5; }
       }
-      for (let s = 1; s < n; s++) { const o = base + s * 3 + 1; if (P[o] < floorY) { P[o] = floorY; } }
+      for (let s = 1; s < n; s++) { const o = base + s * 3 + 1; if (P[o] < floorY) { P[o] = floorY; } roomPush(P, o - 1, 0.004); }
       if (hc && hc.n) for (let s = 1; s < n; s++) { const o = base + s * 3; for (let h = 0; h < hc.n; h++) { const q = h * 8, r = hc.a[q + 3] + 0.008, dx = P[o] - hc.a[q], dy = P[o + 1] - hc.a[q + 1], dz = P[o + 2] - hc.a[q + 2]; if (dx > r || dx < -r || dy > r || dy < -r || dz > r || dz < -r) continue; const d2 = dx * dx + dy * dy + dz * dz; if (d2 >= r * r) continue; const d = Math.sqrt(d2) || 1e-6, k = (r - d) / d; P[o] += dx * k; P[o + 1] += dy * k; P[o + 2] += dz * k; } }
     }
   }
@@ -260,7 +276,7 @@ function createJellies(world) {
       for (let k = 0; k < JF_TENT; k++) { const a = rimIdx(k) * 3; chain(b.tp, b.tq, k * JF_TSEG * 3, JF_TSEG, 0.034 + 0.009 * ((k * 7) % 5) / 4, [b.p[a], b.p[a + 1], b.p[a + 2]], dt, G, 0.95, 0.01, hc); }
       for (let k = 0; k < JF_ORAL; k++) { const a = oralIdx(k) * 3; chain(b.op, b.oq, k * JF_OSEG * 3, JF_OSEG, 0.034, [b.p[a], b.p[a + 1], b.p[a + 2]], dt, G2, 0.94, 0.012, hc); }
     }
-    skin();
+    ripple(); skin();
   };
   // segment as a stretched bead: local x along the segment
   const qx2d = (dx, dy, dz) => { let x = 0, y = -dz, z = dy, w = 1 + dx; if (w < 1e-4) { x = 0; y = 0; z = 1; w = 0; } const l = Math.hypot(x, y, z, w); return [x / l, y / l, z / l, w / l]; };
@@ -300,6 +316,7 @@ function createJellies(world) {
   J.grab = (id, h) => {
     const p = B[h.j].p, cx = p[3 * h.v], cy = p[3 * h.v + 1], cz = p[3 * h.v + 2], idx = [], w = [], off = [], R0 = 0.11;
     for (let v = 0; v < NV; v++) { const d = Math.hypot(p[3 * v] - cx, p[3 * v + 1] - cy, p[3 * v + 2] - cz); if (d < R0) { idx.push(v); w.push(1 - d / R0 * 0.8); off.push(p[3 * v] - cx, p[3 * v + 1] - cy, p[3 * v + 2] - cz); } }
+    touch(B[h.j], h.v);
     grabs.set(id, { j: h.j, idx, w, off, tg: [cx, cy, cz], c0: [cx, cy, cz] }); return [cx, cy, cz];
   };
   J.move = (id, tg) => { const g = grabs.get(id); if (g) g.tg = [tg[0], Math.max(0.02, tg[1]), tg[2]]; };

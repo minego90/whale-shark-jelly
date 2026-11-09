@@ -97,6 +97,30 @@ const FINS = [
   { name: 'tailLo', O: [2.76, 0.0, 0], S: [1, 0.10, 0], Cd: [0, 1, 0], Sp: 0.34, C: 0.19, tipP: 0.12 },
 ].map(makeFin);
 
+// ---------------------------------------------------------------- room boundaries (walls / ceiling)
+// AR: real planes from WebXR plane detection, converted to scene units by the app. Otherwise an invisible
+// virtual room (cylinder wall around the dish + ceiling) so thrown things never fly away forever.
+const ROOM = { planes: [], cx: 1.5, cz: 0, R: 7.5, H: 5.5, virt: true };
+function roomPush(P, i, r, V) {
+  let x = P[i], y = P[i + 1], z = P[i + 2], hit = false;
+  if (ROOM.planes.length) {
+    for (const q of ROOM.planes) {
+      const dx = x - q.o[0], dy = y - q.o[1], dz = z - q.o[2], sd = dx * q.n[0] + dy * q.n[1] + dz * q.n[2];
+      if (sd >= r || sd < -q.th) continue;
+      const pu = dx * q.u[0] + dy * q.u[1] + dz * q.u[2], pv = dx * q.v[0] + dy * q.v[1] + dz * q.v[2];
+      if (pu < q.e[0] || pu > q.e[1] || pv < q.e[2] || pv > q.e[3]) continue;
+      const k = r - sd; x += q.n[0] * k; y += q.n[1] * k; z += q.n[2] * k; hit = true;
+      if (V) { const vn = V[i] * q.n[0] + V[i + 1] * q.n[1] + V[i + 2] * q.n[2]; if (vn < 0) { V[i] -= q.n[0] * vn * 1.4; V[i + 1] -= q.n[1] * vn * 1.4; V[i + 2] -= q.n[2] * vn * 1.4; } }
+    }
+  }
+  if (ROOM.virt) {
+    const ox = x - ROOM.cx, oz = z - ROOM.cz, d = Math.hypot(ox, oz), lim = ROOM.R - r;
+    if (d > lim) { const k = lim / d; x = ROOM.cx + ox * k; z = ROOM.cz + oz * k; hit = true; if (V) { const nx = -ox / d, nz = -oz / d, vn = V[i] * nx + V[i + 2] * nz; if (vn < 0) { V[i] -= nx * vn * 1.4; V[i + 2] -= nz * vn * 1.4; } } }
+    if (y > ROOM.H - r) { y = ROOM.H - r; hit = true; if (V && V[i + 1] > 0) V[i + 1] *= -0.4; }
+  }
+  if (hit) { P[i] = x; P[i + 1] = y; P[i + 2] = z; }
+  return hit;
+}
 function gridSdf(a, y, z) {
   z = Math.abs(z); // keep the body exactly left/right symmetric
   const M = GRID_META, n = M.n, r = M.res;
@@ -637,6 +661,7 @@ function createWorld(cell) {
         const dx = pos[i] - prev[i], dz = pos[i + 2] - prev[i + 2], d = Math.hypot(dx, dz), mf = FLOOR_MU * dy;
         if (d < mf) { pos[i] = prev[i]; pos[i + 2] = prev[i + 2]; } else { const s = (d - mf) / d; pos[i] = prev[i] + dx * s; pos[i + 2] = prev[i + 2] + dz * s; }
       }
+      roomPush(pos, i, 0.01);
       vel[i] = (pos[i] - prev[i]) * id; vel[i + 1] = (pos[i + 1] - prev[i + 1]) * id; vel[i + 2] = (pos[i + 2] - prev[i + 2]) * id;
     }
   }
@@ -944,6 +969,7 @@ function createKrill(world) {
       const lat = Math.hypot(dx - mf.e[0] * s, dy - mf.e[1] * s, dz - mf.e[2] * s);
       if ((s > 0.05 && s < mf.len + 0.08 && lat < 0.2) || (gulp > 0.3 && Math.hypot(dx, dy, dz) < 0.1 && s < 0.05)) { rm(k); K.eaten++; }
       else if (K.p[3 * k + 1] < -0.5 || !isFinite(K.p[3 * k])) rm(k);
+      else roomPush(K.p, 3 * k, K_R, K.v);
     }
   };
   // each krill is drawn as a small translucent shrimp: carapace, orange organ, black eyes, curved tail, fan, antenna, legs

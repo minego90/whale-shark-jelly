@@ -90,8 +90,9 @@ function lureStep(dt) {
   huntCool -= dt; if (ST.gulpT < 0 && d < 0.8 && huntCool <= 0) { ST.gulpT = 0; huntCool = 1.1; }
   if (d < 0.22 && lure.s > 0.8) { lure.act = false; lure.s = 0; lure.grab = false; lure.wait = 7 + Math.random() * 9; S.huntFree = false; }
 }
+function krillDrop(n) { if (ST.ocean) krill.spawn(n, bodyCentre()); else krill.spawn(n); }
 function bodyCentre() { const p = world.pos, n = world.nv; let x = 0, y = 0, z = 0; for (let i = 0; i < n; i++) { x += p[3 * i]; y += p[3 * i + 1]; z += p[3 * i + 2]; } return [x / n, y / n, z / n]; }
-const ST = { cau: true, cauK: 1, uw: false, uwK: 0, jf: true, way: 0, lu: 0, luT: 0, eyeExt: 1, eyeT: 1, swishT: 0, ocean: false, swim: false, kelp: true, gulpT: -1, mesh: false, slow: false, pause: false, twist: false, firm: 0.55, damp: 0.35, nsub: 4, cell: 0.05 };
+const ST = { krillOn: false, kWait: 0, cau: true, cauK: 1, uw: false, uwK: 0, jf: true, way: 0, lu: 0, luT: 0, eyeExt: 1, eyeT: 1, swishT: 0, ocean: false, swim: false, kelp: true, gulpT: -1, mesh: false, slow: false, pause: false, twist: false, firm: 0.55, damp: 0.35, nsub: 4, cell: 0.05 };
 const cam = { yaw: -0.95, pitch: 0.62, dist: 4.7, tx: 1.35, ty: 0.12, tz: 0 };
 const sm = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
@@ -255,6 +256,7 @@ function advance(dtReal) {
   if (ST.kelp) kelp.step(dt);
   ST.uwK += ((ST.uw ? 1 : 0) - ST.uwK) * Math.min(1, dtReal * 1.5);
   ST.cauK += ((ST.cau ? 1 : 0) - ST.cauK) * Math.min(1, dtReal * 1.5);
+  if (ST.krillOn && !ST.pause) { ST.kWait -= dtReal; if (ST.kWait <= 0) { krillDrop(28 + (Math.random() * 26 | 0)); ST.kWait = 14 + Math.random() * 18; } } // keeps feeding: a new handful now and then
   if (ST.jf) { jf.setSwim(ST.swim); jf.setParams(ST.firm, ST.damp); jf.step(dt); }
   simMs = simMs * 0.9 + (performance.now() - t0) * 0.1;
   adaptT += dtReal;
@@ -298,7 +300,7 @@ function updateInstances() {
   }
   if ((xrS || PHN.on) && xiN) { device.queue.writeBuffer(buf.inst, tot * 48, XI, 0, xiN * 12); tot += xiN; }
   if (ST.jf) {
-    device.queue.writeBuffer(buf.jpos, 0, jf.pos); device.queue.writeBuffer(buf.jnrm, 0, jf.nrm);
+    device.queue.writeBuffer(buf.jpos, 0, jf.pos); device.queue.writeBuffer(buf.jnrm, 0, jf.nrm); device.queue.writeBuffer(buf.jrest, 0, jf.rest4);
     const jn = jf.fill(); device.queue.writeBuffer(buf.inst, tot * 48, jf.inst, 0, jn * 12); tot += jn;
   }
   if (ST.kelp) { const kn = kelp.fill(); device.queue.writeBuffer(buf.inst, tot * 48, kelp.inst, 0, kn * 12); tot += kn; }
@@ -408,8 +410,8 @@ const A = {
   lure() { ST.lure = !ST.lure; if (ST.lure) { if (!ST.ocean) { ST.ocean = true; for (let i = 0; i < world.nv; i++) world.vel[3 * i + 1] += 0.45; } ST.swim = true; lure.act = false; lure.s = 0; lure.wait = 1.2; } else lure.grab = false; sync(); },
   eyes() { ST.eyeT = ST.eyeT ? 0 : 1; sync(); },
   light() { ST.luT = ST.luT ? 0 : 1; sync(); },
-  krill() { if (ST.ocean) { const c = bodyCentre(); krill.spawn(110, c); } else krill.spawn(110); },
-  reset() { world.reset(); krill.clear(); ST.gulpT = -1; ST.swishT = 0; ST.ocean = false; ST.swim = false; ST.lure = false; lure.grab = false; ST.eyeT = 1; ST.luT = 0; jf.reset(); uploadDynamic(); sync(); },
+  krill() { ST.krillOn = !ST.krillOn; if (ST.krillOn) { krillDrop(110); ST.kWait = 14 + Math.random() * 14; } sync(); },
+  reset() { world.reset(); krill.clear(); ST.gulpT = -1; ST.swishT = 0; ST.ocean = false; ST.swim = false; ST.lure = false; lure.grab = false; ST.eyeT = 1; ST.luT = 0; ST.krillOn = false; jf.reset(); uploadDynamic(); sync(); },
   jf() { ST.jf = !ST.jf; sync(); },
   uw() { ST.uw = !ST.uw; sync(); },
   cau() { ST.cau = !ST.cau; sync(); },
@@ -417,7 +419,7 @@ const A = {
 };
 function sync() {
   $('bSwish').setAttribute('aria-pressed', !!ST.swishT); $('bEyes').setAttribute('aria-pressed', !ST.eyeT); $('bEyes').textContent = ST.eyeT ? 'Tuck the eyes' : 'Release the eyes';
-  $('bLight').setAttribute('aria-pressed', !!ST.luT); $('bOcean').setAttribute('aria-pressed', !!ST.ocean); $('bSwim').setAttribute('aria-pressed', !!ST.swim); $('bLure').setAttribute('aria-pressed', !!ST.lure); $('bJf').setAttribute('aria-pressed', !!ST.jf); $('bUw').setAttribute('aria-pressed', !!ST.uw); $('bCau').setAttribute('aria-pressed', !!ST.cau);
+  $('bLight').setAttribute('aria-pressed', !!ST.luT); $('bOcean').setAttribute('aria-pressed', !!ST.ocean); $('bSwim').setAttribute('aria-pressed', !!ST.swim); $('bLure').setAttribute('aria-pressed', !!ST.lure); $('bJf').setAttribute('aria-pressed', !!ST.jf); $('bUw').setAttribute('aria-pressed', !!ST.uw); $('bCau').setAttribute('aria-pressed', !!ST.cau); $('bKrill').setAttribute('aria-pressed', !!ST.krillOn);
   document.querySelectorAll('.way').forEach((b, i) => b.setAttribute('aria-pressed', i === ST.way));
   if (xrS) xrS.dirty = true;
   if (PHN.on) phoneSync();
@@ -498,7 +500,7 @@ const VR_ITEMS = (() => {
   const it = [];
   const add = (kind, label, x, w, h, extra = {}) => it.push(Object.assign({ kind, label, x, y: 0, w, h }, extra));
   WAYS.forEach((w, i) => add('way', w.name, 28 + i * 150, 140, 64, { i, y: 82 }));
-  const rows = [['Gulp', A.gulp, null], ['Swish tail', A.swish, () => ST.swishT], ['Light up', A.light, () => ST.luT], ['Ocean gravity', A.ocean, () => ST.ocean], ['Swim', A.swim, () => ST.swim], ['Scatter krill', A.krill, null], ['Reset', A.reset, null]];
+  const rows = [['Gulp', A.gulp, null], ['Swish tail', A.swish, () => ST.swishT], ['Light up', A.light, () => ST.luT], ['Ocean gravity', A.ocean, () => ST.ocean], ['Swim', A.swim, () => ST.swim], ['Scatter krill', A.krill, () => ST.krillOn], ['Reset', A.reset, null]];
   rows.forEach((r, i) => { const col = i % 2, row = (i / 2) | 0; add('btn', r[0], 28 + col * 300, 284, 74, { y: 170 + row * 86, fn: r[1], on: r[2] }); });
   add('stepper', 'Firmness', 28, 584, 70, { y: 526, get: () => ST.firm, set: v => { ST.firm = v; $('sFirm').value = v * 100; $('oFirm').textContent = Math.round(v * 100); } });
   add('btn', 'Underwater blue', 28, 284, 66, { y: 1216, on: () => ST.uw, fn: A.uw });
@@ -534,7 +536,7 @@ function drawPanel(hover) {
     ['Point at a table or the floor.', s.noHT ? 'No hit-test here: it lands on the floor in front of you.' : 'The shark follows your pointer.', 'Pinch (or squeeze the trigger) to place it.', 'Then the board stays at its side.'].forEach((t, i) => g2.fillText(t, 28, 200 + i * 34));
   }
   g2.font = '500 15px system-ui'; g2.fillStyle = xrErrs.length ? '#c0392b' : mute;
-  g2.fillText((place ? s.diag : s.diag + ' · ' + s.frames + 'f') + (xrErrs.length ? ' · ' + xrErrs[xrErrs.length - 1] : ''), 28, place ? 584 : PNH - 16, 584);
+  g2.fillText((place ? s.diag : s.diag + ' · ' + s.frames + 'f · walls ' + (s.nPlanes || 0)) + (xrErrs.length ? ' · ' + xrErrs[xrErrs.length - 1] : ''), 28, place ? 584 : PNH - 16, 584);
   s.items.forEach((it, idx) => {
     const hov = hover === idx; g2.lineWidth = 3;
     if (it.kind === 'way') { g2.fillStyle = WAYS[it.i].sw; g2.strokeStyle = ST.way === it.i ? ink : 'rgba(0,0,0,0)'; g2.beginPath(); g2.roundRect(it.x, it.y, it.w, it.h, 18); g2.fill(); g2.stroke(); g2.fillStyle = '#fff'; g2.font = '700 22px system-ui'; g2.textAlign = 'center'; g2.fillText(it.label, it.x + it.w / 2, it.y + 40); g2.textAlign = 'left'; if (hov) { g2.strokeStyle = '#fff'; g2.strokeRect(it.x, it.y, it.w, it.h); } return; }
@@ -628,7 +630,7 @@ function xrSub(s, view) {
 async function enterXR(ar) {
   try {
     if (ST.cell < 0.06) { ST.cell = 0.06; $('sDetail').value = '0.06'; loadWorld(0.06); }
-    const session = await navigator.xr.requestSession(ar ? 'immersive-ar' : 'immersive-vr', { requiredFeatures: ['local-floor'], optionalFeatures: ar ? ['hit-test', 'hand-tracking'] : ['hand-tracking'] });
+    const session = await navigator.xr.requestSession(ar ? 'immersive-ar' : 'immersive-vr', { requiredFeatures: ['local-floor'], optionalFeatures: ar ? ['hit-test', 'hand-tracking', 'plane-detection'] : ['hand-tracking'] });
     // Default path: render with WebGPU into an offscreen canvas and copy it into a normal WebGL XR layer
     // (Quest Browser has no XRGPUBinding unless flags are set). Add #gpu to the URL to try the native binding.
     xrErrs.length = 0;
@@ -676,13 +678,31 @@ async function enterXR(ar) {
         Array.from(session.inputSources).forEach(addSrc);
       }
     }
-    session.addEventListener('end', () => { world.endGrab(-1); jf.release(); world.setColliders(CB, 0); const dg = xrS ? `${xrS.diag} frames:${xrS.frames}${xrErrs.length ? ' ERR: ' + xrErrs.join(' | ') : ''}` : ''; xrS = null; XI.fill(0); xiN = 0; if (fmt0) { setFmt(fmt0); fmt0 = null; } canvas.width = 0; resize(); $('vrNote').textContent = 'Last XR session → ' + dg; lastT = performance.now(); requestAnimationFrame(frame); });
+    session.addEventListener('end', () => { world.endGrab(-1); jf.release(); ROOM.planes = []; ROOM.virt = true; ROOM.R = 7.5; ROOM.H = 5.5; world.setColliders(CB, 0); const dg = xrS ? `${xrS.diag} frames:${xrS.frames}${xrErrs.length ? ' ERR: ' + xrErrs.join(' | ') : ''}` : ''; xrS = null; XI.fill(0); xiN = 0; if (fmt0) { setFmt(fmt0); fmt0 = null; } canvas.width = 0; resize(); $('vrNote').textContent = 'Last XR session → ' + dg; lastT = performance.now(); requestAnimationFrame(frame); });
     session.requestAnimationFrame(xrFrame);
   } catch (e) { console.error(e); $('vrNote').textContent = 'Could not start ' + (ar ? 'AR' : 'VR') + ': ' + e.message; }
 }
 const XR_M = M4.trs(0, 0.82, -0.7, 0.14);
 let XR_MI = null;
 // sim → XR: sim point (1.5,0,0) (centre of the dish, belly on the table) lands on p.pos; yaw about the vertical; uniform scale
+// walls / ceiling for the physics: real planes (AR plane detection) in scene units, else a virtual room sized in metres
+function roomFromXR(frame, s, pose) {
+  if (!XR_MI) XR_MI = M4.inv(XR_M);
+  const k = Math.hypot(XR_M[0], XR_M[1], XR_M[2]) || 1, h = pose.transform.position, ps = [];
+  const planes = s.ar && frame.detectedPlanes;
+  if (planes) for (const pl of planes) {
+    let pp; try { pp = frame.getPose(pl.planeSpace, s.ref); } catch (e) { pp = null; } if (!pp || !pl.polygon || pl.polygon.length < 3) continue;
+    const m = pp.transform.matrix, o = [m[12], m[13], m[14]]; let n = [m[4], m[5], m[6]];
+    if ((h.x - o[0]) * n[0] + (h.y - o[1]) * n[1] + (h.z - o[2]) * n[2] < 0) n = n.map(c => -c); // face into the room
+    if (n[1] > 0.7 && o[1] < XR_M[13] + 0.05) continue; // floor / surface the dish stands on: the sim floor already handles it
+    let e = [1e9, -1e9, 1e9, -1e9]; for (const q of pl.polygon) { e[0] = Math.min(e[0], q.x); e[1] = Math.max(e[1], q.x); e[2] = Math.min(e[2], q.z); e[3] = Math.max(e[3], q.z); }
+    const M = 0.05; e = [(e[0] - M) / k, (e[1] + M) / k, (e[2] - M) / k, (e[3] + M) / k];
+    ps.push({ o: M4.pt(XR_MI, o), n: nrm(M4.dir(XR_MI, n)), u: nrm(M4.dir(XR_MI, [m[0], m[1], m[2]])), v: nrm(M4.dir(XR_MI, [m[8], m[9], m[10]])), e, th: 0.35 / k, label: pl.semanticLabel || '' });
+  }
+  ROOM.planes = ps; ROOM.virt = ps.length < 2;
+  if (ROOM.virt) { ROOM.R = 2.2 / k; ROOM.H = Math.max(0.6, 2.5 - XR_M[13]) / k; }
+  s.nPlanes = ps.length;
+}
 function applyPlace(p) {
   const c = Math.cos(p.yaw), sn = Math.sin(p.yaw), k = p.scale;
   XR_M.set([k * c, 0, -k * sn, 0, 0, k, 0, 0, k * sn, 0, k * c, 0, p.pos[0] - 1.5 * k * c, p.pos[1], p.pos[2] + 1.5 * k * sn, 1]); XR_MI = null;
@@ -849,6 +869,7 @@ function xrFrame(t, frame) {
 function xrFrameInner(t, frame, s) {
   const dtReal = Math.min(0.05, (t - s.last) / 1000 || 0.016); s.last = t; frameN++;
   const pose = frame.getViewerPose(s.ref); if (!pose) return;
+  if (s.frames % 20 === 0) roomFromXR(frame, s, pose);
   advance(dtReal); uploadDynamic();
   const vm = pose.transform.matrix, eye = [vm[12], vm[13], vm[14]], fwd = nrm([-vm[8], 0, -vm[10]]);
   if (!s.panelPose) { // first board: in front of the viewer, a little to the right

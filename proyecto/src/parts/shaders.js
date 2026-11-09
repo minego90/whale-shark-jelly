@@ -162,6 +162,13 @@ struct FloorOut { @location(0) col: vec4<f32>, @builtin(frag_depth) depth: f32 }
     col = mix(g.bgLow.rgb, g.bgTop.rgb, smoothstep(0.0, 0.5, rd.y));
     if (AR) { alpha = 0.0; }
   }
+  if (AR && g.tint.w > 0.001) { // passthrough: a faint blue water veil over the real room (virtual objects are drawn on top, untouched)
+    let up2 = clamp(rd.y * 1.2 + 0.5, 0.0, 1.0);
+    let veil = mix(vec3<f32>(0.10, 0.32, 0.55), vec3<f32>(0.06, 0.22, 0.48), up2);
+    let va = g.tint.w * 0.30;
+    col = (col * alpha + veil * va * (1.0 - alpha)) / max(alpha + va * (1.0 - alpha), 1e-4);
+    alpha = alpha + va * (1.0 - alpha);
+  }
   if (!AR && g.tint.w > 0.001) { // optional underwater backdrop: a faint blue that deepens upward and with distance
     let dist = select(1.0, clamp(length((g.cam.xyz + rd * (-g.cam.y / min(rd.y, -0.0005))).xz - vec2<f32>(1.5, 0.0)) / 6.0, 0.0, 1.0), rd.y < -0.0005);
     let up = clamp(rd.y * 1.6 + 0.35, 0.0, 1.0);
@@ -540,7 +547,10 @@ fn markings(p0: vec3<f32>, finw: f32, nrm: vec3<f32>, pf: f32) -> Mk {
   col = mix(col, orng * (0.75 + 0.35 * wrap) + vec3<f32>(spec), rimB * 0.85);
   col = mix(col, vec3<f32>(0.80, 0.90, 1.0) * (0.55 + 0.5 * wrap), layer * (1.0 - smoothstep(0.55, 0.95, t)) * 0.22); // pale bluish sub-umbrella
   col = col + pink * pow(1.0 - ndv, 2.5) * 0.30 + g.glow.rgb * (rimB * 0.3 + glowB * 0.3) * lu() * 1.4;
-  let idv = id;
+  // touch ripple (rest.w): a bright aqua-pink ring that runs over the bell and fades back to the normal colour
+  let wv = clamp(id, 0.0, 1.0);
+  let waveC = mix(vec3<f32>(0.35, 1.0, 0.95), vec3<f32>(1.0, 0.45, 0.85), 0.5 + 0.5 * sin(t * 9.0 + g.cam.w * 3.0));
+  col = mix(col, waveC * (0.7 + 0.4 * wrap), wv * 0.55) + waveC * wv * 0.45;
   col = col + vec3<f32>(0.85, 0.9, 1.0) * caus(wp) * clamp(N.y * 0.8 + 0.35, 0.0, 1.0) * keyK() * 0.22;
   return vec4<f32>(tonemap(col * g.bgLow.w), 1.0);
 }

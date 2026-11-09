@@ -34,7 +34,7 @@ src/
   parts/audio.js    ambiente de océano sintetizado (WebAudio)
   parts/phone.js    modo cámara de teléfono (AR con MediaPipe) — OCULTO desde v15
   build.sh          concatena todo -> ../dist/index.html, pone la versión, chequea sintaxis, genera core_node.js
-  VERSION           número de versión actual (31)
+  VERSION           número de versión actual (32)
 (dist/ no va en el repo: el build publicado es /index.html en la raíz)
 tests/sim/*.js      pruebas de física en Node (usan src/core_node.js generado por build.sh)
 tests/browser/      snap.py (captura headless), xrtest.py (simula sesión XR), cv.sh (atajo de cámara)
@@ -95,6 +95,12 @@ python3 tests/browser/xrtest.py /tmp/xr.png      # sesión XR falsa (AR place/pl
 - **Sonido** (audio.js): ambiente de océano sintetizado, slider `sSnd` y stepper "Ocean sound" en XR. El usuario puede dar un audio real si quiere reemplazarlo.
 - **Underwater blue** (`ST.uw`, uniforme `g.tint.w`): tiñe solo el fondo/piso de azul (más profundo arriba y lejos). En AR no hace nada (el fondo es el cuarto real) — pendiente decidir si se quiere un velo leve en AR.
 - **Light rays / cáusticas** (`ST.cau`, uniforme `g.pale.w`): patrón calculado UNA vez por frame en una textura 256² tileable (`CAU_WGSL` en app.js, periodo 2π, canales r/g = dos capas con tiempos distintos), muestreada en `caus(P)` (shaders.js) proyectando a lo largo de la luz. Se aplica a piso, tiburón, beads (kelp/krill) y medusas; en AR sobre el piso real (aditivo vía alpha). v30 las calculaba por píxel y era lento en Quest → v31 textura.
+
+## 6b. Añadido en v32
+- **Scatter krill** es un interruptor (`ST.krillOn`): al activarlo suelta 110 krill y luego, mientras siga activo, suelta otro puñado (28–54) cada 14–32 s (`ST.kWait`, `krillDrop`).
+- **Paredes y techo** (`ROOM` + `roomPush(P, i, r, V)` en core.js): tiburón (cada vértice por sub-paso), medusas (campana y tentáculos) y krill chocan. En AR se pide `plane-detection` (opcional) y `roomFromXR` convierte los planos reales a unidades de escena cada 20 frames (normal orientada hacia la cabeza, se ignora el plano donde está el plato, extents del polígono + 5 cm). Si hay menos de 2 planos o no es AR → cuarto virtual: cilindro R y techo H (PC: R 7.5, H 5.5 unidades; XR: 2.2 m y 2.5 m convertidos con la escala). El panel XR muestra "walls N".
+- **Underwater blue en AR**: velo azul leve (alpha ≈0.3) sobre el passthrough en `fsFloor`; los objetos virtuales no se tiñen.
+- **Onda de color al tocar medusas**: cada toque (mano XR o agarre) registra un evento por medusa (máx. 4, cada ≥0.28 s); `ripple()` calcula por vértice un anillo que se expande (0.28 u/s, ~1.6 s) + destello local, y lo escribe en `rest4.w`, que se sube cada frame (`buf.jrest`). `fsJfish` lo pinta aqua↔rosado y vuelve al color normal.
 
 ## 7. Render (app.js + shaders.js)
 

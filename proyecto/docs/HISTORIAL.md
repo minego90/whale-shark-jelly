@@ -1,5 +1,7 @@
 # Historial de versiones (git, más reciente primero)
 
+- **2026-11-09** — v32: Scatter krill como interruptor con lluvia periódica, paredes/techo (planos AR reales o cuarto virtual), velo azul en AR, onda de color al tocar medusas
+- **2026-11-09 12:05** — Add full project source, notes (CLAUDE.md), tests and bake tools under proyecto/
 - **2026-11-09 11:57** — v31: caustics baked once per frame into a 256px tileable texture (was per-pixel loops), stronger underwater-blue backdrop, near-neutral jellyfish buoyancy
 - **2026-11-09 11:43** — v30: animated underwater caustics (light rays) projected along the sun onto floor, shark, kelp, jellyfish and the real floor in AR; toggle
 - **2026-11-08 22:38** — v29: smaller blue-violet jellyfish that roam the whole dish via spaced waypoints, tentacles/oral arms pushed by hands; optional underwater-blue backdrop toggle
