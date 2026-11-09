@@ -34,7 +34,7 @@ src/
   parts/audio.js    ambiente de océano sintetizado (WebAudio)
   parts/phone.js    modo cámara de teléfono (AR con MediaPipe) — OCULTO desde v15
   build.sh          concatena todo -> ../dist/index.html, pone la versión, chequea sintaxis, genera core_node.js
-  VERSION           número de versión actual (33)
+  VERSION           número de versión actual (34)
 (dist/ no va en el repo: el build publicado es /index.html en la raíz)
 tests/sim/*.js      pruebas de física en Node (usan src/core_node.js generado por build.sh)
 tests/browser/      snap.py (captura headless), xrtest.py (simula sesión XR), cv.sh (atajo de cámara)
@@ -104,6 +104,11 @@ python3 tests/browser/xrtest.py /tmp/xr.png      # sesión XR falsa (AR place/pl
 
 ## 6c. Añadido en v33
 - **Medusas en modo "hold"**: al apagar Swim (después de haber nadado) ya no caen; cada una se queda anclada donde estaba (`b.anc`, resorte + amortiguación, flotación neutra). Si **Swish tail** está activo pulsan en su sitio; si no, quedan quietas y relajadas. Si la mano la mueve/lanza, se re-ancla donde termina (1.5 s). Reset → vuelven al piso; Swim otra vez → vuelven a pasear. `J.setSwim(swim, swish)`.
+
+## 6d. Añadido en v34
+- **Manos**: no hay malla de la mano; son ~45 esferas por mano (cada articulación del hand-tracking con su radio, puntos medios de huesos, relleno de palma y nudillos, muñeca), con posición previa para barridos.
+- **Colisión mano↔medusa barrida**: la esfera se interpola por sub-paso (4 cuando hay manos) y, si el dedo se mueve rápido, todo lo que está en su trayectoria se empuja por delante (antes un toque rápido atravesaba la campana delgada: test `tpoke.js`, antes 0.005 → ahora 0.83 de arrastre).
+- **Onda de color más fuerte**: anillo más ancho, destello, tinte de toda la campana (2.2 s), más opaco mientras brilla; los tentáculos también se iluminan (`kind = 7 + 0.45*glow`).
 
 ## 7. Render (app.js + shaders.js)
 

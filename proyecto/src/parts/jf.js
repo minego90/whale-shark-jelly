@@ -115,18 +115,19 @@ function createJellies(world) {
   J.touch = (j, v) => touch(B[j], v);
   function ripple() {
     for (let j = 0; j < NJ; j++) {
-      const b = B[j], ev = b.ev || []; while (ev.length && tm - ev[0].t0 > 1.6) ev.shift();
+      const b = B[j], ev = b.ev || []; while (ev.length && tm - ev[0].t0 > 2.2) ev.shift(); let gm = 0;
       for (let i = 0; i < NV; i++) {
         let g = 0;
         for (const e of ev) {
           const a = tm - e.t0, v = e.v * 3, dx = S0[3 * i] - S0[v], dy = S0[3 * i + 1] - S0[v + 1], dz = S0[3 * i + 2] - S0[v + 2], d = Math.sqrt(dx * dx + dy * dy + dz * dz), f = d - 0.28 * a;
-          g += Math.exp(-f * f / 0.0012) * (1 - a / 1.6) + Math.exp(-d * d / 0.0016) * Math.max(0, 1 - a * 2.2);
+          g += Math.exp(-f * f / 0.0026) * (1 - a / 2.2) + Math.exp(-d * d / 0.003) * Math.max(0, 1 - a * 1.4) + 0.35 * Math.max(0, 1 - a / 2.2); // ring + flash + whole-bell tint that fades back
         }
-        J.rest4[(j * NV + i) * 4 + 3] = Math.min(1, g);
+        J.rest4[(j * NV + i) * 4 + 3] = Math.min(1, g); if (g > gm) gm = g;
       }
+      b.glow = Math.min(1, gm);
     }
   }
-  function collide(b, dt, hc) {
+  function collide(b, dt, hc, f0, f1) {
     const p = b.p, bb = sbb, ds = SKR + PR, ds2 = ds * ds;
     for (let i = 0; i < NV; i++) {
       const o = i * 3; let x = p[o], y = p[o + 1], z = p[o + 2];
@@ -137,16 +138,24 @@ function createJellies(world) {
           x += dx * k; y += dy * k; z += dz * k;
         }
       }
-      for (let h = 0; h < hc.n; h++) {
-        const q = h * 8, r = hc.a[q + 3] + PR, dx = x - hc.a[q], dy = y - hc.a[q + 1], dz = z - hc.a[q + 2]; if (dx > r || dx < -r || dy > r || dy < -r || dz > r || dz < -r) continue;
-        const d2 = dx * dx + dy * dy + dz * dz; if (d2 >= r * r) continue; const d = Math.sqrt(d2) || 1e-6, k = (r - d) / d;
-        x += dx * k; y += dy * k; z += dz * k; touch(b, i);
+      for (let h = 0; h < hc.n; h++) { // hand part = sphere swept from where it was to where it is in this sub-step
+        const q = h * 8, A = hc.a, r = A[q + 3] + PR;
+        const sx = A[q + 4] + (A[q] - A[q + 4]) * f0, sy = A[q + 5] + (A[q + 1] - A[q + 5]) * f0, sz = A[q + 6] + (A[q + 2] - A[q + 6]) * f0;
+        const ex = A[q + 4] + (A[q] - A[q + 4]) * f1, ey = A[q + 5] + (A[q + 1] - A[q + 5]) * f1, ez = A[q + 6] + (A[q + 2] - A[q + 6]) * f1;
+        const mx = ex - sx, my = ey - sy, mz = ez - sz, ml = Math.sqrt(mx * mx + my * my + mz * mz);
+        const dx = x - ex, dy = y - ey, dz = z - ez, R = r + ml; if (dx > R || dx < -R || dy > R || dy < -R || dz > R || dz < -R) continue;
+        if (ml > r * 0.15) { // moving finger: anything in its path is carried ahead of it, so a fast poke can't slip through the thin bell
+          const ux = mx / ml, uy = my / ml, uz = mz / ml, al = dx * ux + dy * uy + dz * uz, lx = dx - ux * al, ly = dy - uy * al, lz = dz - uz * al, lat = Math.sqrt(lx * lx + ly * ly + lz * lz);
+          if (lat < r && al > -(ml + r) && al < 0) { const ahead = Math.sqrt(Math.max(0, r * r - lat * lat)) * 0.9; x += ux * (ahead - al); y += uy * (ahead - al); z += uz * (ahead - al); touch(b, i); continue; }
+        }
+        const fx = x - ex, fy = y - ey, fz = z - ez, d2 = fx * fx + fy * fy + fz * fz; if (d2 >= r * r) continue; const d = Math.sqrt(d2) || 1e-6, k = (r - d) / d;
+        x += fx * k; y += fy * k; z += fz * k; touch(b, i);
       }
       if (y < PR) { y = PR; const mx = x - b.q[o], mz = z - b.q[o + 2]; x = b.q[o] + mx * 0.55; z = b.q[o + 2] + mz * 0.55; }
       p[o] = x; p[o + 1] = y; p[o + 2] = z; roomPush(p, o, PR);
     }
   }
-  function sub(b, dt, act, hc, centre, ub) {
+  function sub(b, dt, act, hc, centre, ub, f0, f1) {
     const p = b.p, q = b.q, v = b.v, ig = act > 0.02;
     const [R, U, F] = ub, Fm = J.firm, kg = 0.003 + 0.032 * Fm * Fm + 0.2 * act * act, ks = 0.25 + 0.75 * Fm, c = b.c, grav = 9.0 * (1 - 0.985 * act);
     // integrate
@@ -174,7 +183,7 @@ function createJellies(world) {
     for (const gr of grabs.values()) if (gr.j === b.j && gr.tg) { // held by a hand/pointer: drag the nearby gel toward the target
       for (let n = 0; n < gr.idx.length; n++) { const i = gr.idx[n] * 3, w = gr.w[n] * 0.45; p[i] += (gr.tg[0] + gr.off[3 * n] - p[i]) * w; p[i + 1] += (gr.tg[1] + gr.off[3 * n + 1] - p[i + 1]) * w; p[i + 2] += (gr.tg[2] + gr.off[3 * n + 2] - p[i + 2]) * w; }
     }
-    collide(b, dt, hc);
+    collide(b, dt, hc, f0, f1);
     const id = 1 / dt; for (let i = 0; i < NV * 3; i++) v[i] = (p[i] - q[i]) * id;
   }
   const gradv = new Float32Array(NV * 3);
@@ -233,7 +242,7 @@ function createJellies(world) {
     J.active += ((swimOn || hold ? 1 : 0) - J.active) * Math.min(1, dt * (swimOn || hold ? 0.9 : 3)); const act = J.active;
     updateShark(); const hc = world.cols();
     const cen = []; for (let j = 0; j < NJ; j++) { const p = B[j].p; let x = 0, y = 0, z = 0; for (let i = 0; i < NV; i++) { x += p[3 * i]; y += p[3 * i + 1]; z += p[3 * i + 2]; } cen.push([x / NV, y / NV, z / NV]); }
-    const NSUB = 3, h = dt / NSUB;
+    const NSUB = hc.n ? 4 : 3, h = dt / NSUB;
     for (let j = 0; j < NJ; j++) {
       const b = B[j], c0 = cen[j];
       // pulse + steering
@@ -270,7 +279,7 @@ function createJellies(world) {
       }
     }
     for (let s = 0; s < NSUB; s++) {
-      for (let j = 0; j < NJ; j++) sub(B[j], h, act, hc, cen[j], basis(B[j]));
+      for (let j = 0; j < NJ; j++) sub(B[j], h, act, hc, cen[j], basis(B[j]), s / NSUB, (s + 1) / NSUB);
       // jellies never merge: push whole bodies apart
       for (let a = 0; a < NJ; a++) for (let c = a + 1; c < NJ; c++) {
         let ax = 0, ay = 0, az = 0, bx = 0, by = 0, bz = 0; const pa = B[a].p, pb = B[c].p;
@@ -291,11 +300,12 @@ function createJellies(world) {
   // segment as a stretched bead: local x along the segment
   const qx2d = (dx, dy, dz) => { let x = 0, y = -dz, z = dy, w = 1 + dx; if (w < 1e-4) { x = 0; y = 0; z = 1; w = 0; } const l = Math.hypot(x, y, z, w); return [x / l, y / l, z / l, w / l]; };
   const qmul = (a, b) => [a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1], a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0], a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3], a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2]];
+  let curJ = 0;
   J.fill = () => {
     let n = 0; const I = J.inst; if (!J.show) { J.count = 0; return 0; }
-    const put = (x, y, z, q, sx, sy, sz, sh) => { const o = n * 12; I[o] = x; I[o + 1] = y; I[o + 2] = z; I[o + 3] = 7; I[o + 4] = q[0]; I[o + 5] = q[1]; I[o + 6] = q[2]; I[o + 7] = q[3]; I[o + 8] = sx; I[o + 9] = sy; I[o + 10] = sz; I[o + 11] = sh; n++; };
+    const put = (x, y, z, q, sx, sy, sz, sh) => { const o = n * 12; I[o] = x; I[o + 1] = y; I[o + 2] = z; I[o + 3] = 7 + 0.45 * (B[curJ].glow || 0); I[o + 4] = q[0]; I[o + 5] = q[1]; I[o + 6] = q[2]; I[o + 7] = q[3]; I[o + 8] = sx; I[o + 9] = sy; I[o + 10] = sz; I[o + 11] = sh; n++; };
     for (let j = 0; j < NJ; j++) {
-      const b = B[j];
+      const b = B[j]; curJ = j;
       // long fine tentacles from the rim
       for (let k = 0; k < JF_TENT; k++) for (let s = 0; s < JF_TSEG - 1; s++) {
         const o = (k * JF_TSEG + s) * 3, o2 = o + 3, P = b.tp, dx = P[o2] - P[o], dy = P[o2 + 1] - P[o + 1], dz = P[o2 + 2] - P[o + 2], l = Math.hypot(dx, dy, dz) || 1e-6, t = s / (JF_TSEG - 2);

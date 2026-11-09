@@ -273,6 +273,8 @@ fn qrot(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
     if (fr > 0.5) { b7 = mix(peach, mix(pinkA, vec3<f32>(0.55, 0.28, 0.95), tt), 0.4 + 0.6 * rim7); }
     let ndl2 = abs(dot(N, L));
     col = b7 * (0.55 + 0.45 * ndl2 * k) + vec3<f32>(sp * 0.45 * k) + orng * rim7 * fr * 0.35 + pinkA * rim7 * 0.25 + g.glow.rgb * lu() * 0.35 * (0.3 + rim7);
+    let tg = clamp((i.kind - 7.0) / 0.45, 0.0, 1.0); // touch glow travels down the tentacles too
+    col = mix(col, mix(vec3<f32>(0.35, 1.0, 0.95), vec3<f32>(1.0, 0.45, 0.85), 0.5 + 0.5 * sin(tt * 8.0 - g.cam.w * 5.0)), tg * 0.75) + vec3<f32>(0.4, 0.5, 0.5) * tg * 0.5;
     if (i.shade > 0.515 && i.shade < 0.525) { col = vec3<f32>(0.68, 0.35, 1.0) * (0.75 + 0.35 * ndl2) + vec3<f32>(0.75, 0.70, 1.0) * rim7 * 0.4; }
   }
   if (i.kind > 1.5) { col = col + vec3<f32>(0.80, 0.93, 1.0) * caus(i.wp) * clamp(N.y * 0.7 + 0.45, 0.0, 1.0) * k * 0.45; }
@@ -549,8 +551,8 @@ fn markings(p0: vec3<f32>, finw: f32, nrm: vec3<f32>, pf: f32) -> Mk {
   col = col + pink * pow(1.0 - ndv, 2.5) * 0.30 + g.glow.rgb * (rimB * 0.3 + glowB * 0.3) * lu() * 1.4;
   // touch ripple (rest.w): a bright aqua-pink ring that runs over the bell and fades back to the normal colour
   let wv = clamp(id, 0.0, 1.0);
-  let waveC = mix(vec3<f32>(0.35, 1.0, 0.95), vec3<f32>(1.0, 0.45, 0.85), 0.5 + 0.5 * sin(t * 9.0 + g.cam.w * 3.0));
-  col = mix(col, waveC * (0.7 + 0.4 * wrap), wv * 0.55) + waveC * wv * 0.45;
+  let waveC = mix(vec3<f32>(0.10, 0.85, 0.80), vec3<f32>(0.95, 0.25, 0.70), 0.5 + 0.5 * sin(t * 9.0 + g.cam.w * 3.0));
+  col = mix(col, waveC * (0.75 + 0.4 * wrap), clamp(wv * 0.95, 0.0, 0.9)) + waveC * wv * 0.25; // more opaque and brighter while it glows
   col = col + vec3<f32>(0.85, 0.9, 1.0) * caus(wp) * clamp(N.y * 0.8 + 0.35, 0.0, 1.0) * keyK() * 0.22;
   return vec4<f32>(tonemap(col * g.bgLow.w), 1.0);
 }
