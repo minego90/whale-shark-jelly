@@ -169,7 +169,7 @@ body.ph #ph{display:block}
   <button class="act" id="bAR" style="width:100%;margin-bottom:8px" disabled>Place in your room (AR)</button>
   <button class="act" id="bVR" style="width:100%" disabled>Enter VR</button>
   <p class="vrnote" id="vrNote">Checking WebXR…</p>
-  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v21 - 11-09_01:44Z</p>
+  <p class="vrnote" id="verTag" style="opacity:.75;margin-top:6px">Build v22 - 11-09_01:51Z</p>
   <p class="vrnote" style="opacity:.6;font-size:11px;margin-top:2px">Body shape based on "Model 99A - Whale Shark" by DigitalLife3D (CC BY-NC 4.0)</p>
  </aside>
 </div>
@@ -1141,6 +1141,7 @@ function createKrill(world) {
     [-0.003, 0.0025, 0, 0.0088, 0.0086, 0.0076, 4, 0], [-0.0115, 0.0045, 0, 0.0078, 0.0068, 0.0060, 4, 0], [-0.0195, 0.0058, 0, 0.0066, 0.0052, 0.0045, 4, 0],
     [-0.0290, 0.0062, 0, 0.0050, 0.0016, 0.0078, 4, 0],
     [0.034, 0.002, 0.002, 0.0125, 0.0007, 0.0007, 6, 0], [0.009, -0.0125, 0, 0.0012, 0.0085, 0.0017, 6, 0], [0.0, -0.0115, 0, 0.0012, 0.0078, 0.0017, 6, 0]];
+  K.parts = KPARTS;
   K.fillInstances = (eyeExt) => {
     const I = K.inst, q = K.q; let n = 0;
     for (let k = 0; k < K.n; k++) {
@@ -1922,7 +1923,7 @@ function initPipelines() {
   buf.sphV = device.createBuffer({ size: sp.length * 4, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST }); device.queue.writeBuffer(buf.sphV, 0, new Float32Array(sp));
   buf.sphI = device.createBuffer({ size: si.length * 4, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST }); device.queue.writeBuffer(buf.sphI, 0, new Uint32Array(si));
   buf.sphN = si.length;
-  buf.inst = device.createBuffer({ size: (KMAX * KPI + 3 + 64 + KELP_INST) * 48, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+  buf.inst = device.createBuffer({ size: (KMAX * KPI + 3 + 16 + 64 + KELP_INST) * 48, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
 }
 
 function makeVR(w, h) {
@@ -2045,9 +2046,11 @@ function updateInstances() {
   device.queue.writeBuffer(buf.inst, 0, I, 0, (n + 2) * 12);
   let tot = n + 2;
   if (ST.lure && lure.s > 0.01) {
-    const a = lure.t * 0.5, sc = lure.s * LURE_K; LI[0] = lure.p[0]; LI[1] = lure.p[1] + Math.sin(lure.t * 1.1) * 0.01; LI[2] = lure.p[2]; LI[3] = 0;
-    LI[4] = 0; LI[5] = Math.sin(a / 2); LI[6] = 0; LI[7] = Math.cos(a / 2); LI[8] = (K_HALF + K_R) * sc; LI[9] = K_R * sc; LI[10] = K_R * sc; LI[11] = 0.8;
-    device.queue.writeBuffer(buf.inst, tot * 48, LI, 0, 12); tot += 1;
+    const a = lure.t * 0.5, sc = lure.s * LURE_K, ca = Math.cos(a), sa = Math.sin(a), ly = lure.p[1] + Math.sin(lure.t * 1.1) * 0.01, PT_ = krill.parts, LB_ = new Float32Array(PT_.length * 12);
+    PT_.forEach((p, m) => { const o = m * 12, x = p[0] * sc, y = p[1] * sc, z = p[2] * sc;
+      LB_[o] = lure.p[0] + x * ca + z * sa; LB_[o + 1] = ly + y; LB_[o + 2] = lure.p[2] - x * sa + z * ca; LB_[o + 3] = p[6];
+      LB_[o + 4] = 0; LB_[o + 5] = Math.sin(a / 2); LB_[o + 6] = 0; LB_[o + 7] = Math.cos(a / 2); LB_[o + 8] = p[3] * sc; LB_[o + 9] = p[4] * sc; LB_[o + 10] = p[5] * sc; LB_[o + 11] = 0.35; });
+    device.queue.writeBuffer(buf.inst, tot * 48, LB_, 0, PT_.length * 12); tot += PT_.length;
   }
   if ((xrS || PHN.on) && xiN) { device.queue.writeBuffer(buf.inst, tot * 48, XI, 0, xiN * 12); tot += xiN; }
   if (ST.kelp) { const kn = kelp.fill(); device.queue.writeBuffer(buf.inst, tot * 48, kelp.inst, 0, kn * 12); tot += kn; }
@@ -2699,7 +2702,7 @@ async function boot() {
     new ResizeObserver(resize).observe(stage);
     setupXR(); console.log('boot ok', Math.round(performance.now()), fmt);
     lastT = performance.now(); requestAnimationFrame(frame);
-    window.__jelly = { world: () => world, krill: () => krill, ST, A, cam, snapshot, setAR: v => { xrS = v ? { ar: true } : null; }, panelCompile: async () => { const m = device.createShaderModule({ code: WGSL_PANEL }); const i = await m.getCompilationInfo(); return i.messages.map(x => x.type + ':' + x.message + '@' + x.lineNum); } };
+    window.__jelly = { lure, world: () => world, krill: () => krill, ST, A, cam, snapshot, setAR: v => { xrS = v ? { ar: true } : null; }, panelCompile: async () => { const m = device.createShaderModule({ code: WGSL_PANEL }); const i = await m.getCompilationInfo(); return i.messages.map(x => x.type + ':' + x.message + '@' + x.lineNum); } };
   } catch (e) { console.error(e); $('nogpu').style.display = 'flex'; $('nogpu').firstElementChild.textContent = 'Could not start WebGPU: ' + e.message; initUI(); }
 }
 boot();
